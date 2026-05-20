@@ -100,15 +100,34 @@ export async function applyPending(opts: {
   migrations: DiscoveredMigration[];
   historyFile: string;
   configPath: string;
+  logDir?: string;
 }) {
   const appliedNumbers = new Set(opts.history.applied.map((a) => a.number));
   const pending = opts.migrations
     .filter((m) => !appliedNumbers.has(m.number))
     .sort((a, b) => a.number - b.number);
 
+  const writeMigrationLog = async (
+    mig: DiscoveredMigration,
+    outcome: "ok" | "failed" | "blocked",
+    output: string,
+  ) => {
+    if (!opts.logDir) return;
+    try {
+      await fs.mkdir(opts.logDir, { recursive: true });
+      const stamp = new Date().toISOString();
+      const file = path.join(opts.logDir, `${String(mig.number).padStart(4, "0")}_${mig.name}.log`);
+      const header = `[${stamp}] migration=${mig.number}-${mig.name} outcome=${outcome}\n`;
+      await fs.appendFile(file, header + output + "\n");
+    } catch {
+      // best-effort logging
+    }
+  };
+
   for (const mig of pending) {
     if (mig.requiresManualStep) {
       log.warn({ mig: mig.name }, "migration requires manual step; stopping");
+      await writeMigrationLog(mig, "blocked", `requires_manual_step=true; aborting apply`);
       return { ok: false as const, stopped: mig };
     }
     log.info({ mig: mig.name }, "applying migration");
@@ -130,8 +149,10 @@ export async function applyPending(opts: {
       }
     } catch (err) {
       log.error({ err, mig }, "migration failed");
+      await writeMigrationLog(mig, "failed", `${err instanceof Error ? err.stack : String(err)}`);
       return { ok: false as const, failed: mig, error: String(err) };
     }
+    await writeMigrationLog(mig, "ok", output);
     const hash = await sha256(mig.filePath);
     opts.history.applied.push({
       number: mig.number,

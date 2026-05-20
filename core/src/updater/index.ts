@@ -184,6 +184,7 @@ export class Updater {
         migrations,
         historyFile,
         configPath: "/etc/frame/frame.yaml",
+        logDir: path.join(paths.stateDir, "migrations"),
       });
       if (!migResult.ok) {
         throw new Error("migration_failed_or_blocked");

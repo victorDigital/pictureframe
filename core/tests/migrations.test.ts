@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import {
+  applyPending,
   discoverMigrations,
   verifyHistoryIntegrity,
 } from "../src/updater/migrations.js";
@@ -74,6 +75,32 @@ test("verifyHistoryIntegrity fails when a migration was rewritten under us", asy
   const result = await verifyHistoryIntegrity(history, found);
   assert.equal(result.ok, false);
   if (!result.ok) assert.match(result.reason, /hash mismatch/);
+
+  await fs.rm(dir, { recursive: true, force: true });
+});
+
+test("applyPending writes a per-migration log file when logDir is provided", async () => {
+  const dir = await mkTempDir("frame-mig-");
+  const logDir = path.join(dir, "_logs");
+  await fs.writeFile(path.join(dir, "0001_init.yaml"), "description: baseline\n");
+  const migrations = await discoverMigrations(dir);
+  const history = { applied: [] };
+  const historyFile = path.join(dir, "_history.json");
+
+  const result = await applyPending({
+    history,
+    migrations,
+    historyFile,
+    configPath: path.join(dir, "frame.yaml"),
+    logDir,
+  });
+  assert.equal(result.ok, true);
+
+  const files = await fs.readdir(logDir);
+  assert.equal(files.length, 1);
+  assert.match(files[0]!, /^0001_init\.log$/);
+  const content = await fs.readFile(path.join(logDir, files[0]!), "utf8");
+  assert.match(content, /outcome=ok/);
 
   await fs.rm(dir, { recursive: true, force: true });
 });
