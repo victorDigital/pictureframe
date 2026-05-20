@@ -57,6 +57,15 @@ export class Scheduler extends EventEmitter {
     if (!this.screens.has(screenId)) {
       throw new Error(`unknown screen ${screenId}`);
     }
+
+    // SPEC §4.7: manual_next "expires as soon as any other event would have
+    // shown a different screen". Treat any new non-manual-next claim arrival
+    // as such an event, regardless of resolved priority.
+    if (source !== "manual_next") {
+      for (const [id, c] of this.claims) {
+        if (c.source === "manual_next") this.claims.delete(id);
+      }
+    }
     let expiresAt: number | undefined;
     if (source === "manual_pinned") {
       const ms = opts.durationMin ? opts.durationMin * 60_000 : this.pinnedTimeoutMs;
@@ -150,6 +159,7 @@ export class Scheduler extends EventEmitter {
     if (soonest === Infinity) return;
     const delay = Math.max(1000, soonest - now);
     this.expireTimer = setTimeout(() => this.recompute(), delay);
+    this.expireTimer.unref();
   }
 
   start() {

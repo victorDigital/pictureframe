@@ -1,7 +1,15 @@
 {
   "id": "calendar",
-  "name": "calendar",
-  "description": "Agenda from CalDAV or Google Calendar.",
-  "stub": true,
-  "config_schema": { "type": "object", "properties": {} }
+  "name": "Calendar",
+  "description": "Agenda from a public iCal/ICS feed. For CalDAV, run a small proxy that exposes the user calendar as ICS (e.g. via Radicale's read URL). For Google Calendar, use the public ICS export.",
+  "config_schema": {
+    "type": "object",
+    "required": ["ical_url"],
+    "properties": {
+      "ical_url": { "type": "string" },
+      "title": { "type": "string", "default": "Upcoming" },
+      "horizon_days": { "type": "integer", "minimum": 1, "maximum": 30, "default": 14 },
+      "max_events": { "type": "integer", "minimum": 1, "maximum": 50, "default": 12 }
+    }
+  }
 }

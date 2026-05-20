@@ -2,20 +2,183 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>agenda-board</title>
+    <title>Agenda</title>
     <style>
-      html,body{margin:0;height:100%;background:#0a0a0a;color:#888;font-family:ui-sans-serif,system-ui,sans-serif;}
-      body{display:grid;place-items:center;}
-      .panel{text-align:center;}
-      h1{font-weight:300;font-size:clamp(2rem,4vw,3rem);margin:0;color:#ccc;}
-      p{opacity:0.6;margin-top:1rem;}
+      :root { color-scheme: dark; }
+      html, body { margin: 0; height: 100%; background: #0c1117; color: #e6e8ec; font-family: ui-sans-serif, system-ui, sans-serif; }
+      body { display: grid; grid-template-rows: auto 1fr; padding: 4vh 5vw; box-sizing: border-box; gap: 4vh; }
+      header { display: grid; grid-template-columns: auto 1fr auto; align-items: end; gap: 3vw; }
+      .clock .time { font-size: 8vw; font-weight: 200; line-height: 1; letter-spacing: -0.04em; }
+      .clock .date { opacity: 0.7; margin-top: 0.5rem; font-size: 1.5vw; }
+      .weather { text-align: right; }
+      .weather .ic { font-size: 5vw; line-height: 1; }
+      .weather .temp { font-size: 4vw; font-weight: 200; line-height: 1; }
+      .weather .sum { opacity: 0.65; font-size: 1.2vw; }
+      .agenda { display: grid; grid-auto-rows: max-content; gap: 1vh; }
+      .agenda h2 { font-size: 1.3vw; opacity: 0.55; text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 0.5rem; }
+      .ev { display: grid; grid-template-columns: 8vw 1fr; gap: 1vw; padding: 0.6rem 0; border-top: 1px solid rgba(255,255,255,0.08); }
+      .ev:first-of-type { border-top: 0; }
+      .ev .when { font-variant-numeric: tabular-nums; font-size: 1.5vw; opacity: 0.9; }
+      .ev .what { font-size: 1.7vw; line-height: 1.2; }
+      .ev .loc  { opacity: 0.55; font-size: 1.1vw; margin-top: 0.15rem; }
+      .empty { opacity: 0.5; font-style: italic; }
+      .err { color: #ff9b9b; }
     </style>
   </head>
   <body>
-    <div class="panel">
-      <h1>agenda-board</h1>
-      <p>Stub. Implementation pending — see SPEC §7.</p>
-    </div>
-    <script>parent.postMessage({type:"builtin_ready",id:"agenda-board"},"*");</script>
+    <header>
+      <div class="clock">
+        <div class="time" id="time">--:--</div>
+        <div class="date" id="date"></div>
+      </div>
+      <div></div>
+      <div class="weather">
+        <div class="ic" id="wic">…</div>
+        <div class="temp"><span id="wtemp">--</span><span id="wunit">°</span></div>
+        <div class="sum" id="wsum"></div>
+      </div>
+    </header>
+    <section class="agenda">
+      <h2>Today &amp; tomorrow</h2>
+      <div id="agenda" class="empty">Loading agenda…</div>
+    </section>
+    <script>
+      const params = new URLSearchParams(location.search);
+      let config = {};
+      try { config = JSON.parse(params.get("config") || "{}"); } catch (e) {}
+
+      // --- clock ---
+      function tickClock() {
+        const n = new Date();
+        document.getElementById("time").textContent =
+          String(n.getHours()).padStart(2, "0") + ":" + String(n.getMinutes()).padStart(2, "0");
+        document.getElementById("date").textContent =
+          n.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+      }
+      tickClock();
+      setInterval(tickClock, 30000);
+
+      // --- weather ---
+      const ICONS = { 0:"☀️",1:"🌤️",2:"⛅",3:"☁️",45:"🌫️",48:"🌫️",51:"🌦️",53:"🌦️",55:"🌦️",
+        61:"🌧️",63:"🌧️",65:"🌧️",71:"🌨️",73:"🌨️",75:"❄️",80:"🌧️",81:"🌧️",82:"🌧️",
+        95:"⛈️",96:"⛈️",99:"⛈️" };
+      const SUMMARY = { 0:"Clear",1:"Mainly clear",2:"Partly cloudy",3:"Overcast",45:"Fog",
+        51:"Drizzle",53:"Drizzle",55:"Drizzle",61:"Rain",63:"Rain",65:"Heavy rain",
+        71:"Snow",73:"Snow",75:"Heavy snow",80:"Showers",81:"Showers",82:"Showers",
+        95:"Thunder",96:"Thunder",99:"Thunder" };
+      async function loadWeather() {
+        if (config.latitude == null || config.longitude == null) return;
+        try {
+          const url = new URL("https://api.open-meteo.com/v1/forecast");
+          url.searchParams.set("latitude", config.latitude);
+          url.searchParams.set("longitude", config.longitude);
+          url.searchParams.set("current", "temperature_2m,weather_code");
+          url.searchParams.set("temperature_unit", config.units === "imperial" ? "fahrenheit" : "celsius");
+          url.searchParams.set("timezone", "auto");
+          const r = await fetch(url);
+          if (!r.ok) return;
+          const data = await r.json();
+          document.getElementById("wic").textContent = ICONS[data.current.weather_code] || "—";
+          document.getElementById("wtemp").textContent = Math.round(data.current.temperature_2m);
+          document.getElementById("wunit").textContent = data.current_units.temperature_2m;
+          document.getElementById("wsum").textContent = SUMMARY[data.current.weather_code] || "";
+        } catch (e) {
+          // ignore
+        }
+      }
+      loadWeather();
+      setInterval(loadWeather, 15 * 60 * 1000);
+
+      // --- agenda from iCal ---
+      function unfoldIcs(text) {
+        return text.replace(/\r\n[ \t]/g, "").replace(/\n[ \t]/g, "");
+      }
+      function parseIcsDate(value) {
+        // 20260520T080000Z, 20260520T080000, or 20260520
+        const m = value.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z?))?$/);
+        if (!m) return null;
+        const [, y, mo, d, h, mi, s, z] = m;
+        if (!h) return new Date(Number(y), Number(mo) - 1, Number(d));
+        return z === "Z"
+          ? new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s)))
+          : new Date(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s));
+      }
+      function parseIcs(text) {
+        const events = [];
+        const lines = unfoldIcs(text).split(/\r?\n/);
+        let cur = null;
+        for (const line of lines) {
+          if (line.startsWith("BEGIN:VEVENT")) cur = {};
+          else if (line.startsWith("END:VEVENT") && cur) {
+            if (cur.SUMMARY && cur.DTSTART) events.push(cur);
+            cur = null;
+          } else if (cur) {
+            const idx = line.indexOf(":");
+            if (idx < 0) continue;
+            const key = line.slice(0, idx).split(";")[0];
+            const val = line.slice(idx + 1);
+            if (key === "DTSTART") cur.DTSTART = parseIcsDate(val);
+            else if (key === "DTEND") cur.DTEND = parseIcsDate(val);
+            else if (key === "SUMMARY") cur.SUMMARY = val;
+            else if (key === "LOCATION") cur.LOCATION = val;
+          }
+        }
+        return events;
+      }
+      function fmtTime(d) {
+        return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+      }
+      function fmtWhen(ev, now) {
+        const sameDay = ev.DTSTART.toDateString() === now.toDateString();
+        const allDay =
+          ev.DTSTART.getHours() === 0 && ev.DTSTART.getMinutes() === 0 && !ev.DTEND;
+        if (allDay) return sameDay ? "All day" : ev.DTSTART.toLocaleDateString(undefined, { weekday: "short" });
+        if (sameDay) return fmtTime(ev.DTSTART);
+        return ev.DTSTART.toLocaleDateString(undefined, { weekday: "short" }) + " " + fmtTime(ev.DTSTART);
+      }
+      async function loadAgenda() {
+        const el = document.getElementById("agenda");
+        if (!config.ical_url) {
+          el.className = "empty";
+          el.textContent = "Configure ical_url to show events.";
+          return;
+        }
+        try {
+          const r = await fetch(config.ical_url);
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          const text = await r.text();
+          const now = new Date();
+          const horizon = new Date(now.getTime() + 36 * 3600 * 1000);
+          const events = parseIcs(text)
+            .filter((e) => e.DTSTART >= now && e.DTSTART <= horizon)
+            .sort((a, b) => a.DTSTART - b.DTSTART)
+            .slice(0, config.events_to_show || 6);
+          if (events.length === 0) {
+            el.className = "empty";
+            el.textContent = "Nothing on the schedule.";
+            return;
+          }
+          el.className = "";
+          el.innerHTML = "";
+          for (const ev of events) {
+            const row = document.createElement("div");
+            row.className = "ev";
+            row.innerHTML =
+              '<div class="when">' + fmtWhen(ev, now) + '</div>' +
+              '<div><div class="what">' + (ev.SUMMARY || "—") + '</div>' +
+              (ev.LOCATION ? '<div class="loc">' + ev.LOCATION + '</div>' : '') +
+              '</div>';
+            el.appendChild(row);
+          }
+        } catch (e) {
+          el.className = "err";
+          el.textContent = "Could not load calendar: " + e;
+        }
+      }
+      loadAgenda();
+      setInterval(loadAgenda, 10 * 60 * 1000);
+
+      parent.postMessage({ type: "builtin_ready", id: "agenda-board" }, "*");
+    </script>
   </body>
 </html>

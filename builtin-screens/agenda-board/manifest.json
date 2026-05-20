@@ -1,7 +1,17 @@
 {
   "id": "agenda-board",
-  "name": "agenda-board",
-  "description": "Day-at-a-glance: weather + calendar + commute.",
-  "stub": true,
-  "config_schema": { "type": "object", "properties": {} }
+  "name": "Agenda board",
+  "description": "Morning glance: clock, weather, and an iCal-fed calendar agenda. Configure weather like the standalone weather screen plus an iCal URL.",
+  "config_schema": {
+    "type": "object",
+    "required": ["latitude", "longitude"],
+    "properties": {
+      "latitude": { "type": "number" },
+      "longitude": { "type": "number" },
+      "location_label": { "type": "string", "default": "" },
+      "units": { "type": "string", "enum": ["metric", "imperial"], "default": "metric" },
+      "ical_url": { "type": "string", "description": "Public iCal/ICS feed (CalDAV needs a proxy)" },
+      "events_to_show": { "type": "integer", "minimum": 1, "maximum": 12, "default": 6 }
+    }
+  }
 }

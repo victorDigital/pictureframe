@@ -2,20 +2,129 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>calendar</title>
+    <title>Calendar</title>
     <style>
-      html,body{margin:0;height:100%;background:#0a0a0a;color:#888;font-family:ui-sans-serif,system-ui,sans-serif;}
-      body{display:grid;place-items:center;}
-      .panel{text-align:center;}
-      h1{font-weight:300;font-size:clamp(2rem,4vw,3rem);margin:0;color:#ccc;}
-      p{opacity:0.6;margin-top:1rem;}
+      :root { color-scheme: dark; }
+      html, body { margin: 0; height: 100%; background: #0c1117; color: #e6e8ec; font-family: ui-sans-serif, system-ui, sans-serif; }
+      body { padding: 4vh 6vw; box-sizing: border-box; display: grid; grid-template-rows: auto 1fr; gap: 2vh; }
+      h1 { font-weight: 300; margin: 0; font-size: 4vw; letter-spacing: -0.02em; }
+      .group { margin-top: 2.5vh; }
+      .group .date { opacity: 0.65; text-transform: uppercase; letter-spacing: 0.1em; font-size: 1.2vw; margin-bottom: 0.5rem; }
+      .ev { display: grid; grid-template-columns: 11vw 1fr; gap: 1.5vw; padding: 0.7rem 0; border-top: 1px solid rgba(255,255,255,0.08); }
+      .ev:first-of-type { border-top: 0; }
+      .ev .when { font-variant-numeric: tabular-nums; font-size: 1.5vw; opacity: 0.9; }
+      .ev .what { font-size: 1.6vw; line-height: 1.2; }
+      .ev .loc { opacity: 0.55; font-size: 1.1vw; margin-top: 0.15rem; }
+      .empty { opacity: 0.55; font-style: italic; }
+      .err { color: #ff9b9b; }
     </style>
   </head>
   <body>
-    <div class="panel">
-      <h1>calendar</h1>
-      <p>Stub. Implementation pending — see SPEC §7.</p>
-    </div>
-    <script>parent.postMessage({type:"builtin_ready",id:"calendar"},"*");</script>
+    <h1 id="title">Upcoming</h1>
+    <div id="agenda" class="empty">Loading…</div>
+    <script>
+      const params = new URLSearchParams(location.search);
+      let config = {};
+      try { config = JSON.parse(params.get("config") || "{}"); } catch (e) {}
+      document.getElementById("title").textContent = config.title || "Upcoming";
+
+      function unfoldIcs(text) { return text.replace(/\r\n[ \t]/g, "").replace(/\n[ \t]/g, ""); }
+      function parseIcsDate(value) {
+        const m = value.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z?))?$/);
+        if (!m) return null;
+        const [, y, mo, d, h, mi, s, z] = m;
+        if (!h) return new Date(Number(y), Number(mo) - 1, Number(d));
+        return z === "Z"
+          ? new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s)))
+          : new Date(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s));
+      }
+      function parseIcs(text) {
+        const events = [];
+        const lines = unfoldIcs(text).split(/\r?\n/);
+        let cur = null;
+        for (const line of lines) {
+          if (line.startsWith("BEGIN:VEVENT")) cur = {};
+          else if (line.startsWith("END:VEVENT") && cur) {
+            if (cur.SUMMARY && cur.DTSTART) events.push(cur);
+            cur = null;
+          } else if (cur) {
+            const idx = line.indexOf(":");
+            if (idx < 0) continue;
+            const key = line.slice(0, idx).split(";")[0];
+            const val = line.slice(idx + 1).replace(/\\n/g, " ");
+            if (key === "DTSTART") cur.DTSTART = parseIcsDate(val);
+            else if (key === "DTEND") cur.DTEND = parseIcsDate(val);
+            else if (key === "SUMMARY") cur.SUMMARY = val;
+            else if (key === "LOCATION") cur.LOCATION = val;
+          }
+        }
+        return events;
+      }
+      function groupByDay(events) {
+        const groups = new Map();
+        for (const ev of events) {
+          const key = ev.DTSTART.toDateString();
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(ev);
+        }
+        return [...groups.entries()].sort(([a], [b]) => new Date(a) - new Date(b));
+      }
+      function fmtTime(d) {
+        const allDay = d.getHours() === 0 && d.getMinutes() === 0;
+        return allDay ? "All day" : d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+      }
+      function fmtDayLabel(date) {
+        const d = new Date(date);
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today.getTime() + 86400000);
+        if (d.toDateString() === today.toDateString()) return "Today, " + d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+        if (d.toDateString() === tomorrow.toDateString()) return "Tomorrow, " + d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+        return d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+      }
+
+      async function load() {
+        const el = document.getElementById("agenda");
+        try {
+          const r = await fetch(config.ical_url);
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          const text = await r.text();
+          const now = new Date();
+          const horizon = new Date(now.getTime() + (config.horizon_days || 14) * 86400000);
+          const events = parseIcs(text)
+            .filter((e) => e.DTSTART >= now && e.DTSTART <= horizon)
+            .sort((a, b) => a.DTSTART - b.DTSTART)
+            .slice(0, config.max_events || 12);
+          if (events.length === 0) {
+            el.className = "empty";
+            el.textContent = "Nothing scheduled.";
+            return;
+          }
+          el.className = "";
+          el.innerHTML = "";
+          for (const [date, items] of groupByDay(events)) {
+            const group = document.createElement("div");
+            group.className = "group";
+            group.innerHTML = '<div class="date">' + fmtDayLabel(date) + "</div>";
+            for (const ev of items) {
+              const row = document.createElement("div");
+              row.className = "ev";
+              row.innerHTML =
+                '<div class="when">' + fmtTime(ev.DTSTART) + '</div>' +
+                '<div><div class="what">' + (ev.SUMMARY || "—") + '</div>' +
+                (ev.LOCATION ? '<div class="loc">' + ev.LOCATION + '</div>' : '') +
+                '</div>';
+              group.appendChild(row);
+            }
+            el.appendChild(group);
+          }
+        } catch (e) {
+          el.className = "err";
+          el.textContent = "Could not load calendar: " + e;
+        }
+      }
+      load();
+      setInterval(load, 10 * 60 * 1000);
+      parent.postMessage({ type: "builtin_ready", id: "calendar" }, "*");
+    </script>
   </body>
 </html>
