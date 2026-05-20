@@ -128,7 +128,7 @@ async function main() {
 
   updater.start();
 
-  if (store.current.config.ha.enabled) {
+  if (store.current.config.ha.enabled && process.env.FRAME_HA_DISABLE !== "1") {
     ha.start().catch((err) => log.error({ err }, "ha start failed"));
   }
 

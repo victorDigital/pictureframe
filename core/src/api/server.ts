@@ -257,6 +257,42 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
   );
   app.post("/api/updates/rollback", async () => deps.updater.rollback());
 
+  app.get("/api/updates/quarantine", async () => ({
+    quarantined: deps.updater.quarantineList(),
+  }));
+  app.delete<{ Params: { tag: string } }>(
+    "/api/updates/quarantine/:tag",
+    async (req) => ({
+      cleared: await deps.updater.clearQuarantine(req.params.tag),
+    }),
+  );
+  app.delete("/api/updates/quarantine", async () => ({
+    cleared: await deps.updater.clearQuarantine(),
+  }));
+
+  app.get("/api/updates/snapshots", async () => {
+    const dir = paths.snapshotsDir;
+    try {
+      const entries = await fs.readdir(dir);
+      const out = await Promise.all(
+        entries.map(async (name) => {
+          const m = name.match(/^(.+?)--(.+)$/);
+          if (!m) return null;
+          const stat = await fs.stat(path.join(dir, name));
+          return {
+            from: m[1],
+            to: m[2],
+            at: stat.mtime.toISOString(),
+            name,
+          };
+        }),
+      );
+      return { snapshots: out.filter(Boolean) };
+    } catch {
+      return { snapshots: [] };
+    }
+  });
+
   app.get<{ Querystring: { lines?: number; subsystem?: string } }>("/api/logs", async (req) => {
     return deps.updater.tailLog(req.query.lines ?? 200, req.query.subsystem);
   });
@@ -550,10 +586,11 @@ async function detectPublicIp(): Promise<boolean> {
   return false;
 }
 
-export async function startServer(deps: ApiDeps, port = 8080) {
+export async function startServer(deps: ApiDeps, port?: number) {
   const app = await createServer(deps);
-  await app.listen({ host: "0.0.0.0", port });
-  log.info({ port }, "api listening");
+  const effectivePort = port ?? Number(process.env.FRAME_PORT ?? 8080);
+  await app.listen({ host: "0.0.0.0", port: effectivePort });
+  log.info({ port: effectivePort }, "api listening");
   void paths;
   return app;
 }

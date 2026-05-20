@@ -19,6 +19,8 @@ import {
 import { paths } from "../util/paths.js";
 import { sub } from "../util/logger.js";
 import { logUpdaterEvent } from "./log.js";
+import { Quarantine } from "./quarantine.js";
+import { preflightCheck } from "./preflight.js";
 
 const exec = promisify(execFile);
 const log = sub("updater");
@@ -40,6 +42,7 @@ export class Updater {
   private status_: UpdaterStatus;
   private pollTimer?: NodeJS.Timeout;
   private busy = false;
+  private quarantine: Quarantine;
 
   constructor(
     private store: ConfigStore,
@@ -47,6 +50,7 @@ export class Updater {
     gh?: GitHubClient,
   ) {
     this.gh = gh ?? new GitHubClient(store.current.config.updater.repo);
+    this.quarantine = new Quarantine(path.join(paths.stateDir, "quarantine.json"));
     this.status_ = {
       current: currentVersion,
       busy: false,
@@ -54,6 +58,14 @@ export class Updater {
       autoApply: store.current.config.updater.auto_apply,
       safeMode: store.isSafeMode(),
     };
+  }
+
+  quarantineList(): Array<{ tag: string; at: string; reason: string }> {
+    return this.quarantine.list();
+  }
+
+  async clearQuarantine(tag?: string): Promise<number> {
+    return this.quarantine.clear(tag);
   }
 
   status(): UpdaterStatus {
@@ -65,6 +77,7 @@ export class Updater {
       log.warn("safe mode: updater disabled");
       return;
     }
+    void this.quarantine.load();
     const intervalMs = this.store.current.config.updater.poll_interval_min * 60_000;
     void this.poll();
     this.pollTimer = setInterval(() => void this.poll(), intervalMs);
@@ -86,6 +99,13 @@ export class Updater {
       const release = await this.gh.latestForChannel(cfg.channel);
       if (!release) return;
       if (release.tag === this.currentVersion) {
+        this.status_.available = undefined;
+        return;
+      }
+      if (this.quarantine.has(release.tag)) {
+        // SPEC §5.5 step 4: don't re-attempt a failed release on every poll.
+        // The operator can clear it from the UI / API when they've fixed
+        // whatever was wrong.
         this.status_.available = undefined;
         return;
       }
@@ -120,12 +140,16 @@ export class Updater {
   async applyAvailable(opts: { force: boolean }) {
     if (!this.status_.available) throw new Error("no_release_available");
     const cfg = this.store.current.config.updater;
+    const wantedTag = this.status_.available.tag;
+    if (this.quarantine.has(wantedTag)) {
+      throw new Error(`quarantined: ${wantedTag} — clear from /api/updates/quarantine to retry`);
+    }
     const appliedAfter = new Date(this.status_.available.appliedAfter);
     if (!opts.force && appliedAfter > new Date()) {
       throw new Error(`staging_delay_active until ${appliedAfter.toISOString()}`);
     }
     const release = await this.gh.latestForChannel(cfg.channel);
-    if (!release || release.tag !== this.status_.available.tag) {
+    if (!release || release.tag !== wantedTag) {
       throw new Error("release_disappeared");
     }
     return this.applyTag(release, opts);
@@ -190,6 +214,14 @@ export class Updater {
         throw new Error("migration_failed_or_blocked");
       }
 
+      // SPEC §5.2 step 7 / §5.8: pre-flight the staged release on :8081
+      // before touching `current`. If it doesn't come up healthy we never
+      // restart the live frame-core.
+      const preflight = await preflightCheck({ stagingDir: staging });
+      if (!preflight.ok) {
+        throw new Error(`preflight_failed: ${preflight.reason}`);
+      }
+
       await fs.rename(staging, finalDest);
       await fs.symlink(finalDest, paths.current + ".new").catch(async () => {
         await fs.rm(paths.current + ".new", { force: true });
@@ -203,9 +235,10 @@ export class Updater {
         await this.rollbackTo(from, snapshotDir);
         this.status_.lastResult = "rolled_back";
         this.status_.lastError = "health_check_failed";
+        await this.quarantine.add(tag, "health_check_failed");
         await logUpdaterEvent({
           level: "warn",
-          msg: "post-start health check failed; rolled back",
+          msg: "post-start health check failed; rolled back and quarantined",
           tag,
           from,
         });
@@ -224,9 +257,11 @@ export class Updater {
       log.error({ err }, "apply failed");
       this.status_.lastResult = "failed";
       this.status_.lastError = String(err);
+      await this.quarantine.add(tag, String(err).slice(0, 200));
+      this.status_.available = undefined;
       await logUpdaterEvent({
         level: "error",
-        msg: "apply failed",
+        msg: "apply failed; quarantined",
         tag,
         from,
         details: String(err),

@@ -12,7 +12,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test --import tsx tests/claims.test.ts tests/config.test.ts tests/configStore.test.ts tests/scheduler.test.ts tests/familyMessage.test.ts tests/migrations.test.ts tests/snapshot.test.ts tests/updater.test.ts tests/stateBus.test.ts tests/rules.test.ts tests/githubClient.test.ts tests/api.test.ts"
+    "test": "node --test --import tsx tests/claims.test.ts tests/config.test.ts tests/configStore.test.ts tests/scheduler.test.ts tests/familyMessage.test.ts tests/migrations.test.ts tests/snapshot.test.ts tests/quarantine.test.ts tests/updater.test.ts tests/stateBus.test.ts tests/rules.test.ts tests/githubClient.test.ts tests/api.test.ts"
   },
   "dependencies": {
     "ajv": "^8.17.1",
