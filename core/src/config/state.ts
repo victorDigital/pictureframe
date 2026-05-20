@@ -50,6 +50,11 @@ export class ConfigStore extends EventEmitter {
     return Boolean(this.state.safeMode);
   }
 
+  safeModeInfo(): { reason: string; details?: unknown } | null {
+    if (!this.state.safeMode) return null;
+    return { reason: this.state.safeMode.reason, details: this.state.safeMode.details };
+  }
+
   startWatching() {
     if (this.watcher) return;
     const paths = [this.configPath];

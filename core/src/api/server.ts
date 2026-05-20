@@ -107,6 +107,7 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
     return {
       version: deps.version,
       safe_mode: deps.configStore.isSafeMode(),
+      safe_mode_info: deps.configStore.safeModeInfo(),
       device: cfg.config.device.name,
       active: deps.scheduler.activeScreen()?.id ?? null,
       claims: deps.scheduler.list(),

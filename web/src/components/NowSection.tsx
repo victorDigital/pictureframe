@@ -4,6 +4,7 @@ import { api } from "../api.js";
 type State = {
   version: string;
   safe_mode: boolean;
+  safe_mode_info: { reason: string; details?: unknown } | null;
   device: string;
   active: string | null;
   claims: Array<{
@@ -46,7 +47,29 @@ export function NowSection() {
     <>
       {state.safe_mode && (
         <div className="banner">
-          Safe mode active. Configuration validation failed; see Settings → Configuration.
+          <div>
+            <strong>Safe mode active.</strong> Configuration validation failed.
+          </div>
+          {state.safe_mode_info && (
+            <div style={{ marginTop: "0.5rem" }}>
+              Reason: <code>{state.safe_mode_info.reason}</code>
+              {state.safe_mode_info.details != null && (
+                <pre
+                  style={{
+                    marginTop: "0.5rem",
+                    background: "rgba(0,0,0,0.3)",
+                    padding: "0.5rem",
+                    fontSize: "0.8rem",
+                    whiteSpace: "pre-wrap",
+                  }}
+                >
+                  {typeof state.safe_mode_info.details === "string"
+                    ? state.safe_mode_info.details
+                    : JSON.stringify(state.safe_mode_info.details, null, 2)}
+                </pre>
+              )}
+            </div>
+          )}
         </div>
       )}
       <div className="tile">
