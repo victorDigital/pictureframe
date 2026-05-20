@@ -36,44 +36,67 @@ export function NowSection() {
 
     // Subscribe to /api/events for live push. The full refresh above seeds
     // the initial view; subsequent activate / release events arrive inline.
-    const token = getToken();
-    const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    const url = `${proto}//${location.host}/api/events?token=${encodeURIComponent(token ?? "")}`;
-    const ws = new WebSocket(url);
-    wsRef.current = ws;
-    ws.onmessage = (ev) => {
-      try {
-        const msg = JSON.parse(ev.data) as {
-          type?: string;
-          payload?: {
-            active: string | null;
-            claims: State["claims"];
-            brightness?: number | null;
-          };
-        };
-        if (msg.type !== "state" || !msg.payload) return;
-        const p = msg.payload;
-        setState((prev) =>
-          prev
-            ? {
-                ...prev,
-                active: p.active,
-                claims: p.claims,
-                brightness: p.brightness ?? prev.brightness,
-              }
-            : prev,
-        );
-      } catch {
-        // ignore
-      }
-    };
-    ws.onerror = () => undefined;
+    // Reconnects on close with exponential backoff capped at 30 s.
+    let cancelled = false;
+    let backoffMs = 1000;
+    let reconnectTimer: number | null = null;
 
-    // Fallback polling at a relaxed cadence in case the WS drops.
+    const connect = () => {
+      if (cancelled) return;
+      const token = getToken();
+      const proto = location.protocol === "https:" ? "wss:" : "ws:";
+      const url = `${proto}//${location.host}/api/events?token=${encodeURIComponent(token ?? "")}`;
+      const ws = new WebSocket(url);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        backoffMs = 1000;
+        // On (re)connect, fetch the authoritative state in case we missed events.
+        void refresh();
+      };
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data) as {
+            type?: string;
+            payload?: {
+              active: string | null;
+              claims: State["claims"];
+              brightness?: number | null;
+            };
+          };
+          if (msg.type !== "state" || !msg.payload) return;
+          const p = msg.payload;
+          setState((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  active: p.active,
+                  claims: p.claims,
+                  brightness: p.brightness ?? prev.brightness,
+                }
+              : prev,
+          );
+        } catch {
+          // ignore
+        }
+      };
+      ws.onclose = () => {
+        if (cancelled) return;
+        const delay = backoffMs;
+        backoffMs = Math.min(backoffMs * 2, 30_000);
+        reconnectTimer = window.setTimeout(connect, delay);
+      };
+      ws.onerror = () => ws.close();
+    };
+    connect();
+
+    // Fallback polling at a relaxed cadence in case the WS keeps failing.
     const t = setInterval(refresh, 30000);
     return () => {
+      cancelled = true;
       clearInterval(t);
-      ws.close();
+      if (reconnectTimer != null) clearTimeout(reconnectTimer);
+      wsRef.current?.close();
     };
   }, []);
 

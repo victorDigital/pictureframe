@@ -76,3 +76,35 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
   filtering.
 - `Scheduler.scheduleExpiryRecheck` `unref()`s its timer so the
   process can exit cleanly.
+- Screen editor renders a typed form (select / checkbox / numeric
+  input) from each built-in's `manifest.json` `config_schema`
+  rather than a raw JSON textarea; a JSON-edit fallback toggle
+  remains for advanced cases. Backed by `GET /api/builtins`.
+- `/api/state` carries `safe_mode_info { reason, details? }` so
+  validation failures surface in the Now tab without SSH.
+- Now tab subscribes to `/api/events` for live state push and
+  falls back to polling at 30 s instead of 5 s. The push message
+  carries the full payload — one round trip per scheduler event.
+- `/ws` and `/api/events` accept either a `?token=...` query
+  string (web UI) or a loopback source (kiosk shell on the
+  device), since browsers can't set `Authorization` on a WS
+  upgrade.
+
+### Fixed
+
+- `CdpManager.start` called a non-existent CDP method
+  `Target.setDiscoverDiscoveryEnabled`. Replaced with the actual
+  `Target.setDiscoverTargets` — without this, frame-core never
+  saw the initial tab list on real hardware.
+- `web/vite.config.ts` now proxies `/api/events` in dev so the
+  live-state subscription works against `dev:core`.
+
+### Tests
+
+- 36 tests pass: claims, config, scheduler (manual_next semantics
+  + default fallback), family-message rate limiting, migration
+  integrity (SHA mismatch, missing migration), snapshot
+  round-trip, updater (staging delay, applyAvailable preconditions)
+  with an injectable mock GitHubClient, StateBus fan-out and
+  exception safety, plus HTTP-level coverage of `/healthz`,
+  `/api/state`, `PUT /api/screens`, `POST /family-message`.
