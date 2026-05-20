@@ -39,7 +39,10 @@ die() { printf '\033[1;31m[install]\033[0m %s\n' "$*" >&2; exit 1; }
 # 1. Detect distribution
 ###############################################################################
 
+# shellcheck source=/dev/null
 . /etc/os-release
+# ID, VERSION_ID, PRETTY_NAME come from os-release.
+# shellcheck disable=SC2153
 case "$ID" in
   debian)
     if [[ "${VERSION_ID:-}" != "12" ]]; then
@@ -254,7 +257,8 @@ if [[ ! -f /etc/frame/secrets/bearer_token ]]; then
   if [[ "$NONINTERACTIVE" -eq 1 ]]; then
     TOKEN="$(generate_secret)"
   else
-    read -r -p "Bearer token for the web UI (blank to autogenerate): " TOKEN
+    read -r -s -p "Bearer token for the web UI (blank to autogenerate): " TOKEN
+    echo
     if [[ -z "$TOKEN" ]]; then TOKEN="$(generate_secret)"; fi
   fi
   install -m 0640 -o root -g frame /dev/null /etc/frame/secrets/bearer_token
@@ -267,7 +271,8 @@ if [[ ! -f /etc/frame/secrets/vnc ]]; then
   if [[ "$NONINTERACTIVE" -eq 1 ]]; then
     VNCPW="$(generate_secret)"
   else
-    read -r -p "VNC password (blank to autogenerate): " VNCPW
+    read -r -s -p "VNC password (blank to autogenerate): " VNCPW
+    echo
     if [[ -z "$VNCPW" ]]; then VNCPW="$(generate_secret)"; fi
   fi
   install -m 0640 -o root -g frame /dev/null /etc/frame/secrets/vnc
@@ -279,7 +284,8 @@ if [[ ! -f /etc/frame/secrets/mqtt ]]; then
   if [[ "$NONINTERACTIVE" -eq 1 ]]; then
     MQTTPW=""
   else
-    read -r -p "MQTT password (blank to skip HA integration for now): " MQTTPW
+    read -r -s -p "MQTT password (blank to skip HA integration for now): " MQTTPW
+    echo
   fi
   install -m 0640 -o root -g frame /dev/null /etc/frame/secrets/mqtt
   printf '%s\n' "$MQTTPW" > /etc/frame/secrets/mqtt
