@@ -2,20 +2,94 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>transit</title>
+    <title>Transit</title>
     <style>
-      html,body{margin:0;height:100%;background:#0a0a0a;color:#888;font-family:ui-sans-serif,system-ui,sans-serif;}
-      body{display:grid;place-items:center;}
-      .panel{text-align:center;}
-      h1{font-weight:300;font-size:clamp(2rem,4vw,3rem);margin:0;color:#ccc;}
-      p{opacity:0.6;margin-top:1rem;}
+      :root { color-scheme: dark; }
+      html, body { margin: 0; height: 100%; background: #0c1117; color: #e6e8ec; font-family: ui-sans-serif, system-ui, sans-serif; }
+      body { padding: 4vh 5vw; box-sizing: border-box; display: grid; align-content: start; gap: 3vh; }
+      .stop h2 { font-size: 2vw; font-weight: 300; margin: 0 0 0.75rem; letter-spacing: -0.01em; }
+      .dep { display: grid; grid-template-columns: 5vw 1fr auto; gap: 1.5vw; align-items: baseline; padding: 0.4rem 0; border-top: 1px solid rgba(255,255,255,0.08); }
+      .dep:first-of-type { border-top: 0; }
+      .line { display: inline-block; min-width: 4vw; padding: 0.1em 0.4em; border-radius: 0.3em; background: rgba(79, 140, 255, 0.18); color: var(--accent, #4f8cff); text-align: center; font-weight: 500; font-size: 1.5vw; }
+      .dest { font-size: 1.6vw; }
+      .when { font-size: 1.6vw; font-variant-numeric: tabular-nums; opacity: 0.85; }
+      .soon { color: #ff9b6b; font-weight: 500; }
+      .err { color: #ff9b9b; }
+      .empty { opacity: 0.5; font-style: italic; }
     </style>
   </head>
-  <body>
-    <div class="panel">
-      <h1>transit</h1>
-      <p>Stub. Implementation pending — see SPEC §7.</p>
-    </div>
-    <script>parent.postMessage({type:"builtin_ready",id:"transit"},"*");</script>
-  </body>
+  <body id="root"></body>
+    <script>
+      const params = new URLSearchParams(location.search);
+      let config = {};
+      try { config = JSON.parse(params.get("config") || "{}"); } catch (e) {}
+      const root = document.getElementById("root");
+
+      function fmtWhen(d) {
+        const diff = Math.round((d.getTime() - Date.now()) / 60000);
+        if (diff <= 0) return "now";
+        if (diff < 60) return diff + " min";
+        return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+      }
+
+      async function load() {
+        if (!config.feed_url) {
+          root.innerHTML = '<div class="err">Configure feed_url.</div>';
+          return;
+        }
+        try {
+          const r = await fetch(config.feed_url);
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          const data = await r.json();
+          render(data);
+        } catch (e) {
+          root.innerHTML = '<div class="err">Could not load: ' + e + '</div>';
+        }
+      }
+
+      function render(data) {
+        root.innerHTML = "";
+        const stops = data.stops || [];
+        if (stops.length === 0) {
+          const e = document.createElement("div");
+          e.className = "empty";
+          e.textContent = "No stops configured.";
+          root.appendChild(e);
+          return;
+        }
+        for (const stop of stops) {
+          const el = document.createElement("section");
+          el.className = "stop";
+          const h = document.createElement("h2");
+          h.textContent = stop.name;
+          el.appendChild(h);
+          const departures = (stop.departures || []).slice(0, config.max_per_stop || 4);
+          if (departures.length === 0) {
+            const ne = document.createElement("div");
+            ne.className = "empty";
+            ne.textContent = "No upcoming departures.";
+            el.appendChild(ne);
+          }
+          for (const dep of departures) {
+            const when = dep.when ? new Date(dep.when) : null;
+            const mins = typeof dep.minutes === "number" ? dep.minutes : (when ? Math.round((when - Date.now()) / 60000) : null);
+            const soon = mins != null && mins <= 5;
+            const row = document.createElement("div");
+            row.className = "dep";
+            row.innerHTML =
+              '<span class="line">' + (dep.line || "—") + '</span>' +
+              '<span class="dest">' + (dep.destination || "") + '</span>' +
+              '<span class="when' + (soon ? " soon" : "") + '">' +
+                (when ? fmtWhen(when) : (mins != null ? mins + " min" : "—")) +
+              '</span>';
+            el.appendChild(row);
+          }
+          root.appendChild(el);
+        }
+      }
+
+      load();
+      setInterval(load, (config.refresh_sec || 60) * 1000);
+      parent.postMessage({ type: "builtin_ready", id: "transit" }, "*");
+    </script>
 </html>

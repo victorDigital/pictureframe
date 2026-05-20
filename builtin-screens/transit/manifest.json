@@ -1,7 +1,14 @@
 {
   "id": "transit",
-  "name": "transit",
-  "description": "Next departures from configured stops.",
-  "stub": true,
-  "config_schema": { "type": "object", "properties": {} }
+  "name": "Transit",
+  "description": "Next departures from configured stops. Transit APIs are heterogeneous, so this screen consumes a generic JSON feed your reverse proxy / glue script produces: { stops: [{ name, departures: [{ when, line, destination, minutes? }] }] }. Wire that to Resrobot, MBTA, Rejseplanen, etc.",
+  "config_schema": {
+    "type": "object",
+    "required": ["feed_url"],
+    "properties": {
+      "feed_url": { "type": "string", "description": "URL returning the JSON shape described above" },
+      "refresh_sec": { "type": "integer", "minimum": 15, "default": 60 },
+      "max_per_stop": { "type": "integer", "minimum": 1, "maximum": 12, "default": 4 }
+    }
+  }
 }
