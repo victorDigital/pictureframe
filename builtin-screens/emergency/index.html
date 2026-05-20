@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Configuration error</title>
+    <style>
+      :root { color-scheme: dark; }
+      html, body { margin: 0; height: 100%; background: #1a0808; color: #ffdada; font-family: ui-monospace, "JetBrains Mono", monospace; }
+      body { display: grid; place-items: center; padding: 2rem; }
+      .panel { max-width: 60rem; }
+      h1 { color: #ff6f6f; font-size: clamp(2rem, 4vw, 3.5rem); margin: 0 0 1rem; }
+      p { line-height: 1.4; margin: 0.5rem 0; opacity: 0.85; }
+      .reason { background: rgba(255, 80, 80, 0.1); padding: 1rem; border-left: 4px solid #ff6f6f; margin-top: 1.5rem; white-space: pre-wrap; }
+      code { background: rgba(255, 255, 255, 0.08); padding: 0.1rem 0.3rem; border-radius: 0.2rem; }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <h1>Configuration error</h1>
+      <p>The frame is running in <strong>safe mode</strong> because <code>frame.yaml</code> or
+        <code>screens.yaml</code> failed validation.</p>
+      <p>The web UI on this device is still reachable. SSH in and check
+        <code>journalctl -u frame-core</code> for details, or use the validation
+        view in <em>Settings → Configuration</em>.</p>
+      <div id="reason" class="reason">Loading reason…</div>
+    </div>
+    <script>
+      fetch("/healthz").then(r => r.json()).then(b => {
+        document.getElementById("reason").textContent =
+          `safe_mode=${b.safe_mode}\nversion=${b.version}`;
+      }).catch(() => {});
+      parent.postMessage({ type: "builtin_ready", id: "emergency" }, "*");
+    </script>
+  </body>
+</html>

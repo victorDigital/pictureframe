@@ -1,0 +1,19 @@
+{
+  "id": "clock",
+  "name": "Clock",
+  "description": "Large clock with date. Configurable face.",
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "face": {
+        "type": "string",
+        "enum": ["digital", "analog", "minimal"],
+        "default": "minimal"
+      },
+      "show_seconds": { "type": "boolean", "default": false },
+      "show_date": { "type": "boolean", "default": true },
+      "color": { "type": "string", "default": "#f5f5f5" },
+      "background": { "type": "string", "default": "#000" }
+    }
+  }
+}

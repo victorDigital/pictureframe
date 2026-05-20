@@ -1,0 +1,7 @@
+{
+  "id": "photos",
+  "name": "photos",
+  "description": "Photo slideshow (Immich / local directory / Google Photos backends).",
+  "stub": true,
+  "config_schema": { "type": "object", "properties": {} }
+}

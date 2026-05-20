@@ -1,0 +1,7 @@
+{
+  "id": "weather",
+  "name": "weather",
+  "description": "Current conditions + forecast from Open-Meteo.",
+  "stub": true,
+  "config_schema": { "type": "object", "properties": {} }
+}

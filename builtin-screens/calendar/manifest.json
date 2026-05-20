@@ -1,0 +1,7 @@
+{
+  "id": "calendar",
+  "name": "calendar",
+  "description": "Agenda from CalDAV or Google Calendar.",
+  "stub": true,
+  "config_schema": { "type": "object", "properties": {} }
+}

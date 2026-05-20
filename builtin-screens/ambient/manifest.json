@@ -1,0 +1,7 @@
+{
+  "id": "ambient",
+  "name": "ambient",
+  "description": "Slow generative visuals for late evening.",
+  "stub": true,
+  "config_schema": { "type": "object", "properties": {} }
+}

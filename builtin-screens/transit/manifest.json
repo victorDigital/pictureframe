@@ -1,0 +1,7 @@
+{
+  "id": "transit",
+  "name": "transit",
+  "description": "Next departures from configured stops.",
+  "stub": true,
+  "config_schema": { "type": "object", "properties": {} }
+}

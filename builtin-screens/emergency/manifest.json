@@ -1,0 +1,6 @@
+{
+  "id": "emergency",
+  "name": "Configuration error (safe mode)",
+  "description": "Shown when frame.yaml or screens.yaml fail validation.",
+  "config_schema": { "type": "object", "properties": {} }
+}

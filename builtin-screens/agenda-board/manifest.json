@@ -1,0 +1,7 @@
+{
+  "id": "agenda-board",
+  "name": "agenda-board",
+  "description": "Day-at-a-glance: weather + calendar + commute.",
+  "stub": true,
+  "config_schema": { "type": "object", "properties": {} }
+}

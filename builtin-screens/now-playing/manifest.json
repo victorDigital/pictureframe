@@ -1,0 +1,7 @@
+{
+  "id": "now-playing",
+  "name": "now-playing",
+  "description": "Album art + track info from HA media_player.",
+  "stub": true,
+  "config_schema": { "type": "object", "properties": {} }
+}

@@ -1,0 +1,7 @@
+{
+  "id": "media-viewer",
+  "name": "media-viewer",
+  "description": "Local image/video viewer pointing at a directory.",
+  "stub": true,
+  "config_schema": { "type": "object", "properties": {} }
+}

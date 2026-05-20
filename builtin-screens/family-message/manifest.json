@@ -1,0 +1,7 @@
+{
+  "id": "family-message",
+  "name": "family-message",
+  "description": "LAN-accessible POST endpoint; 1-hour messages.",
+  "stub": true,
+  "config_schema": { "type": "object", "properties": {} }
+}

@@ -1,0 +1,7 @@
+{
+  "id": "status-board",
+  "name": "status-board",
+  "description": "Grid of HA sensor tiles.",
+  "stub": true,
+  "config_schema": { "type": "object", "properties": {} }
+}

@@ -1,0 +1,7 @@
+{
+  "id": "doorbell",
+  "name": "doorbell",
+  "description": "Auto-trigger on HA motion/doorbell event.",
+  "stub": true,
+  "config_schema": { "type": "object", "properties": {} }
+}
