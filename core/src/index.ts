@@ -8,6 +8,7 @@ import { RuleStore } from "./scheduler/rules.js";
 import { CdpManager } from "./cdp/manager.js";
 import { ScreenController } from "./cdp/screenController.js";
 import { ShellBus } from "./api/shellBus.js";
+import { StateBus } from "./api/stateBus.js";
 import { startServer } from "./api/server.js";
 import { FamilyMessages } from "./api/familyMessage.js";
 import { Updater } from "./updater/index.js";
@@ -45,6 +46,7 @@ async function main() {
   });
 
   const shell = new ShellBus();
+  const stateBus = new StateBus();
   const cdp = new CdpManager();
   const screens = new ScreenController(cdp, shell, {
     maxPreloaded: store.current.config.scheduler.max_preloaded_url_screens,
@@ -61,6 +63,13 @@ async function main() {
   scheduler.on("activate", (screen, claim) => {
     log.info({ screen: screen.id, claim: claim.claimId }, "scheduler activate");
     void screens.show(screen, screen.transitionMs ?? 600);
+    stateBus.broadcast({
+      type: "state",
+      payload: {
+        active: screen.id,
+        claims: scheduler.list(),
+      },
+    });
   });
 
   store.on("reloaded", (state) => {
@@ -85,6 +94,7 @@ async function main() {
     family,
     rules,
     vnc,
+    stateBus,
     version,
   });
 

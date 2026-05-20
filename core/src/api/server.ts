@@ -17,6 +17,7 @@ import { CdpManager } from "../cdp/manager.js";
 import { FamilyMessages } from "./familyMessage.js";
 import { RuleStore } from "../scheduler/rules.js";
 import { VncSupervisor } from "../system/vnc.js";
+import { StateBus } from "./stateBus.js";
 import { paths } from "../util/paths.js";
 
 const log = sub("api");
@@ -32,6 +33,7 @@ export type ApiDeps = {
   family: FamilyMessages;
   rules: RuleStore;
   vnc: VncSupervisor;
+  stateBus: StateBus;
   version: string;
 };
 
@@ -56,6 +58,7 @@ const UNAUTH_PATHS = new Set([
   "/api/now_playing",
   "/family-message",
 ]);
+const WS_PATHS = new Set(["/ws", "/api/events"]);
 
 export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
   const app = Fastify({ logger: false, trustProxy: true });
@@ -90,8 +93,24 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
     if (UNAUTH_PATHS.has(url)) return;
     if (url.startsWith("/shell/") || url.startsWith("/builtin/")) return;
     if (!url.startsWith("/api") && !url.startsWith("/ws")) return;
-    const header = req.headers.authorization;
+
     const expected = deps.configStore.current.bearerToken;
+
+    // Browsers can't set Authorization on a WebSocket upgrade. Two
+    // fallbacks apply to every /ws and /api/events upgrade:
+    //  - a ?token=... query string (the web UI passes its localStorage
+    //    token this way)
+    //  - any request originating from 127.0.0.1 (the kiosk shell on
+    //    the device is always loopback-local, so the shell page can
+    //    connect without sending a token)
+    if (WS_PATHS.has(url)) {
+      const qsToken = new URL(req.url, "http://x").searchParams.get("token");
+      if (qsToken === expected) return;
+      const ip = req.ip;
+      if (ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1") return;
+    }
+
+    const header = req.headers.authorization;
     if (!header || header !== `Bearer ${expected}`) {
       const err = new Error("unauthorized");
       (err as Error & { statusCode: number }).statusCode = 401;
@@ -119,6 +138,35 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
   // ---- screens --------------------------------------------------------------
 
   app.get("/api/screens", async () => ({ screens: deps.configStore.current.screens }));
+
+  app.get("/api/builtins", async (_req, reply) => {
+    const dir = path.join(repoRoot, "builtin-screens");
+    let entries: string[];
+    try {
+      entries = await fs.readdir(dir);
+    } catch (err) {
+      reply.code(500);
+      return { error: "builtins_unreadable", details: String(err) };
+    }
+    const out: Array<{
+      id: string;
+      name?: string;
+      description?: string;
+      stub?: boolean;
+      config_schema?: Record<string, unknown>;
+    }> = [];
+    for (const name of entries.sort()) {
+      const manifestPath = path.join(dir, name, "manifest.json");
+      try {
+        const raw = await fs.readFile(manifestPath, "utf8");
+        const parsed = JSON.parse(raw) as { id?: string };
+        out.push({ id: parsed.id ?? name, ...parsed });
+      } catch {
+        // skip directories without a manifest.json
+      }
+    }
+    return { builtins: out };
+  });
 
   app.put<{ Body: { screens: Screen[] } }>("/api/screens", async (req, reply) => {
     const result = ScreensFileSchema.safeParse({ screens: req.body?.screens });
@@ -347,6 +395,15 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
     deps.shell.attach(sink);
     socket.on("message", (data: Buffer) => deps.shell.ingest(data.toString()));
     socket.on("close", () => deps.shell.detach(sink));
+  });
+
+  app.get("/api/events", { websocket: true }, (socket) => {
+    const sink = {
+      send: (msg: string) => socket.send(msg),
+      close: () => socket.close(),
+    };
+    deps.stateBus.attach(sink);
+    socket.on("close", () => deps.stateBus.detach(sink));
   });
 
   app.setErrorHandler((err: unknown, _req, reply) => {

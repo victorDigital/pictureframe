@@ -10,7 +10,22 @@ export type CoreToShell =
   | { type: "unload_builtin"; id: string }
   | { type: "show_overlay_image"; dataUrl: string; transitionMs: number }
   | { type: "show_overlay_color"; color: string; transitionMs: number }
-  | { type: "hide_overlay"; transitionMs: number };
+  | { type: "hide_overlay"; transitionMs: number }
+  | {
+      type: "state";
+      payload: {
+        active: string | null;
+        claims: Array<{
+          claimId: string;
+          screenId: string;
+          source: string;
+          priority: number;
+          expiresAt?: number;
+          label?: string;
+        }>;
+        brightness?: number | null;
+      };
+    };
 
 export type ShellToCore =
   | { type: "hello"; protocolVersion: number }

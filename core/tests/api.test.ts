@@ -15,6 +15,7 @@ import { FamilyMessages } from "../src/api/familyMessage.js";
 import { RuleStore } from "../src/scheduler/rules.js";
 import { CronEngine } from "../src/scheduler/cron.js";
 import { VncSupervisor } from "../src/system/vnc.js";
+import { StateBus } from "../src/api/stateBus.js";
 import type { FrameConfig, Screen } from "../src/config/schema.js";
 
 async function makeDeps() {
@@ -76,6 +77,7 @@ async function makeDeps() {
   const engine = new CronEngine(scheduler);
   const rules = new RuleStore(path.join(tmp, "rules.yaml"), engine);
   const vnc = new VncSupervisor();
+  const stateBus = new StateBus();
 
   return {
     configStore: store,
@@ -88,6 +90,7 @@ async function makeDeps() {
     family,
     rules,
     vnc,
+    stateBus,
     tmp,
   };
 }

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { api } from "../api.js";
+import { useEffect, useRef, useState } from "react";
+import { api, getToken } from "../api.js";
 
 type State = {
   version: string;
@@ -21,6 +21,7 @@ type State = {
 export function NowSection() {
   const [state, setState] = useState<State | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
   async function refresh() {
     try {
@@ -29,10 +30,34 @@ export function NowSection() {
       setErr(String(e));
     }
   }
+
   useEffect(() => {
     refresh();
-    const t = setInterval(refresh, 5000);
-    return () => clearInterval(t);
+
+    // Subscribe to /api/events for live push. The full refresh above seeds
+    // the initial view; subsequent activate / release events arrive over WS
+    // and we re-fetch /api/state to pick up brightness/updater drift too.
+    const token = getToken();
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    const url = `${proto}//${location.host}/api/events?token=${encodeURIComponent(token ?? "")}`;
+    const ws = new WebSocket(url);
+    wsRef.current = ws;
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data) as { type?: string };
+        if (msg.type === "state") void refresh();
+      } catch {
+        // ignore
+      }
+    };
+    ws.onerror = () => undefined;
+
+    // Fallback polling at a relaxed cadence in case the WS drops.
+    const t = setInterval(refresh, 30000);
+    return () => {
+      clearInterval(t);
+      ws.close();
+    };
   }, []);
 
   async function release(claimId: string) {

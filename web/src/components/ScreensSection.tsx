@@ -1,5 +1,26 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../api.js";
+
+type PropSchema = {
+  type?: string;
+  default?: unknown;
+  enum?: string[];
+  description?: string;
+  minimum?: number;
+  maximum?: number;
+};
+
+type BuiltinManifest = {
+  id: string;
+  name?: string;
+  description?: string;
+  stub?: boolean;
+  config_schema?: {
+    type?: string;
+    required?: string[];
+    properties?: Record<string, PropSchema>;
+  };
+};
 
 type Screen = {
   id: string;
@@ -165,6 +186,15 @@ export function ScreensSection() {
   );
 }
 
+const selectStyle = {
+  width: "100%",
+  padding: "0.5rem",
+  background: "var(--bg)",
+  color: "var(--text)",
+  border: "1px solid var(--border)",
+  borderRadius: "0.4rem",
+};
+
 function ScreenEditor({
   screen,
   onCancel,
@@ -175,8 +205,82 @@ function ScreenEditor({
   onSave: (s: Screen) => void;
 }) {
   const [draft, setDraft] = useState<Screen>(screen);
+  const [builtins, setBuiltins] = useState<BuiltinManifest[]>([]);
+  const [rawJson, setRawJson] = useState(false);
+
+  useEffect(() => {
+    api<{ builtins: BuiltinManifest[] }>("/api/builtins")
+      .then((b) => setBuiltins(b.builtins))
+      .catch(() => undefined);
+  }, []);
+
+  const manifest = useMemo(
+    () => (draft.type === "builtin" ? builtins.find((b) => b.id === draft.source) : undefined),
+    [builtins, draft.type, draft.source],
+  );
+
   const update = <K extends keyof Screen>(key: K, value: Screen[K]) =>
     setDraft({ ...draft, [key]: value });
+  const updateConfig = (k: string, v: unknown) =>
+    setDraft({ ...draft, config: { ...(draft.config ?? {}), [k]: v } });
+
+  function renderManifestField(key: string, schema: PropSchema) {
+    const current = draft.config?.[key];
+    const value =
+      current !== undefined ? current : "default" in schema ? schema.default : "";
+
+    if (schema.enum) {
+      return (
+        <select
+          value={String(value ?? "")}
+          onChange={(e) => updateConfig(key, e.target.value)}
+          style={selectStyle}
+        >
+          <option value="">(unset)</option>
+          {schema.enum.map((opt: string) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (schema.type === "boolean") {
+      return (
+        <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <input
+            type="checkbox"
+            checked={Boolean(value)}
+            onChange={(e) => updateConfig(key, e.target.checked)}
+          />
+          {schema.description ?? "Enabled"}
+        </label>
+      );
+    }
+
+    if (schema.type === "integer" || schema.type === "number") {
+      return (
+        <input
+          type="number"
+          min={schema.minimum}
+          max={schema.maximum}
+          value={value as number | string}
+          onChange={(e) =>
+            updateConfig(key, e.target.value === "" ? undefined : Number(e.target.value))
+          }
+        />
+      );
+    }
+
+    return (
+      <input
+        type="text"
+        value={(value as string) ?? ""}
+        onChange={(e) => updateConfig(key, e.target.value || undefined)}
+      />
+    );
+  }
 
   return (
     <div className="tile">
@@ -194,15 +298,35 @@ function ScreenEditor({
       <select
         value={draft.type}
         onChange={(e) => update("type", e.target.value as Screen["type"])}
-        style={{ width: "100%", padding: "0.5rem", background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: "0.4rem" }}
+        style={selectStyle}
       >
         <option value="url">URL</option>
         <option value="builtin">Built-in</option>
       </select>
       <label style={{ marginTop: "0.75rem", display: "block" }}>
-        {draft.type === "url" ? "URL" : "Built-in source ID (e.g. clock)"}
+        {draft.type === "url" ? "URL" : "Built-in source"}
       </label>
-      <input type="text" value={draft.source} onChange={(e) => update("source", e.target.value)} />
+      {draft.type === "builtin" ? (
+        <select
+          value={draft.source}
+          onChange={(e) => update("source", e.target.value)}
+          style={selectStyle}
+        >
+          <option value="">— pick one —</option>
+          {builtins.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name ?? b.id}
+              {b.stub ? " (stub)" : ""}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          type="text"
+          value={draft.source}
+          onChange={(e) => update("source", e.target.value)}
+        />
+      )}
       {draft.type === "url" && (
         <>
           <label style={{ marginTop: "0.75rem", display: "block" }}>Reload interval (sec)</label>
@@ -231,31 +355,78 @@ function ScreenEditor({
         />
         Preload (keep in memory)
       </label>
-      <label style={{ marginTop: "0.75rem", display: "block" }}>Config (JSON)</label>
-      <textarea
-        rows={5}
-        defaultValue={draft.config ? JSON.stringify(draft.config, null, 2) : ""}
-        onChange={(e) => {
-          try {
-            update("config", e.target.value ? JSON.parse(e.target.value) : undefined);
-          } catch {
-            // ignore until valid
-          }
-        }}
-        style={{
-          width: "100%",
-          background: "var(--bg)",
-          color: "var(--text)",
-          border: "1px solid var(--border)",
-          borderRadius: "0.4rem",
-          padding: "0.5rem",
-          fontFamily: "ui-monospace, monospace",
-          fontSize: "0.85rem",
-          boxSizing: "border-box",
-        }}
-      />
+
+      <div style={{ marginTop: "1rem", borderTop: "1px solid var(--border)", paddingTop: "1rem" }}>
+        <div className="row" style={{ alignItems: "baseline" }}>
+          <h3 style={{ margin: 0, fontSize: "1rem", color: "var(--muted)" }}>Config</h3>
+          {manifest?.config_schema?.properties && (
+            <button
+              className="secondary"
+              style={{ marginLeft: "auto" }}
+              onClick={() => setRawJson((v) => !v)}
+            >
+              {rawJson ? "Use form" : "Edit as JSON"}
+            </button>
+          )}
+        </div>
+        {manifest?.description && (
+          <p style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: "0.5rem" }}>
+            {manifest.description}
+          </p>
+        )}
+        {manifest?.config_schema?.properties && !rawJson ? (
+          Object.entries(manifest.config_schema.properties).map(([key, schema]) => (
+            <div key={key} style={{ marginTop: "0.75rem" }}>
+              <label style={{ display: "block" }}>
+                {key}
+                {(manifest.config_schema?.required ?? []).includes(key) && (
+                  <span style={{ color: "var(--danger)" }}> *</span>
+                )}
+              </label>
+              {renderManifestField(key, schema)}
+              {schema.description && schema.type !== "boolean" && (
+                <div style={{ color: "var(--muted)", fontSize: "0.8rem", marginTop: "0.25rem" }}>
+                  {schema.description}
+                </div>
+              )}
+            </div>
+          ))
+        ) : (
+          <textarea
+            rows={6}
+            defaultValue={draft.config ? JSON.stringify(draft.config, null, 2) : ""}
+            onChange={(e) => {
+              try {
+                update(
+                  "config",
+                  e.target.value ? (JSON.parse(e.target.value) as Record<string, unknown>) : undefined,
+                );
+              } catch {
+                // ignore until valid
+              }
+            }}
+            style={{
+              width: "100%",
+              background: "var(--bg)",
+              color: "var(--text)",
+              border: "1px solid var(--border)",
+              borderRadius: "0.4rem",
+              padding: "0.5rem",
+              fontFamily: "ui-monospace, monospace",
+              fontSize: "0.85rem",
+              boxSizing: "border-box",
+              marginTop: "0.5rem",
+            }}
+          />
+        )}
+      </div>
+
       <div className="row" style={{ marginTop: "1rem" }}>
-        <button className="primary" onClick={() => onSave(draft)} disabled={!draft.id || !draft.name || !draft.source}>
+        <button
+          className="primary"
+          onClick={() => onSave(draft)}
+          disabled={!draft.id || !draft.name || !draft.source}
+        >
           Save
         </button>
         <button className="secondary" onClick={onCancel}>
