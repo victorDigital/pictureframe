@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
 
+type Snapshot = { from: string; to: string; at: string; name: string };
+type QuarantinedTag = { tag: string; at: string; reason: string };
+
 type Status = {
   current: string;
   available?: { tag: string; firstSeenAt: string; appliedAfter: string; prerelease: boolean };
@@ -13,12 +16,21 @@ type Status = {
 
 export function UpdatesSection() {
   const [status, setStatus] = useState<Status | null>(null);
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
+  const [quarantined, setQuarantined] = useState<QuarantinedTag[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function refresh() {
     try {
-      setStatus(await api<Status>("/api/updates"));
+      const [s, snap, q] = await Promise.all([
+        api<Status>("/api/updates"),
+        api<{ snapshots: Snapshot[] }>("/api/updates/snapshots"),
+        api<{ quarantined: QuarantinedTag[] }>("/api/updates/quarantine"),
+      ]);
+      setStatus(s);
+      setSnapshots(snap.snapshots);
+      setQuarantined(q.quarantined);
     } catch (e) {
       setErr(String(e));
     }
@@ -28,6 +40,13 @@ export function UpdatesSection() {
     const t = setInterval(refresh, 10_000);
     return () => clearInterval(t);
   }, []);
+
+  async function clearQuarantine(tag?: string) {
+    const target = tag ? `/api/updates/quarantine/${encodeURIComponent(tag)}` : "/api/updates/quarantine";
+    if (!confirm(tag ? `Allow ${tag} to be retried?` : "Clear all quarantined releases?")) return;
+    await api(target, { method: "DELETE" });
+    refresh();
+  }
 
   async function check() {
     setBusy(true);
@@ -63,6 +82,7 @@ export function UpdatesSection() {
   const stagingActive = appliedAfter && appliedAfter > new Date();
 
   return (
+    <>
     <div className="tile">
       <h2>Updates</h2>
       <div>
@@ -111,5 +131,67 @@ export function UpdatesSection() {
         </div>
       )}
     </div>
+
+    <div className="tile">
+      <h2>Quarantined releases</h2>
+      {quarantined.length === 0 ? (
+        <p style={{ color: "var(--muted)" }}>
+          No releases are quarantined. Failed applies land here and are skipped by the
+          poller until cleared (SPEC §5.5).
+        </p>
+      ) : (
+        <>
+          {quarantined.map((q) => (
+            <div
+              key={q.tag}
+              className="row"
+              style={{ borderTop: "1px solid var(--border)", padding: "0.5rem 0" }}
+            >
+              <div>
+                <div><strong>{q.tag}</strong></div>
+                <div style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+                  {new Date(q.at).toLocaleString()} — {q.reason}
+                </div>
+              </div>
+              <div style={{ marginLeft: "auto" }}>
+                <button className="secondary" onClick={() => clearQuarantine(q.tag)}>
+                  Clear
+                </button>
+              </div>
+            </div>
+          ))}
+          <div className="row" style={{ marginTop: "0.75rem" }}>
+            <button className="danger" onClick={() => clearQuarantine()}>
+              Clear all
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+
+    <div className="tile">
+      <h2>Snapshots</h2>
+      {snapshots.length === 0 ? (
+        <p style={{ color: "var(--muted)" }}>No snapshots yet — they're created on apply.</p>
+      ) : (
+        snapshots.map((s) => (
+          <div
+            key={s.name}
+            className="row"
+            style={{ borderTop: "1px solid var(--border)", padding: "0.5rem 0" }}
+          >
+            <div>
+              <div>
+                <code>{s.from}</code> → <code>{s.to}</code>
+              </div>
+              <div style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+                {new Date(s.at).toLocaleString()}
+              </div>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  </>
   );
 }

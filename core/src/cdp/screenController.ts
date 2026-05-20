@@ -82,7 +82,15 @@ export class ScreenController {
         const tabId = await this.cdp.newTab(target.source);
         tab = { tabId, lastUsed: Date.now() };
         this.urlTabs.set(target.id, tab);
+        // SPEC §4.5: hold the overlay up to 4 s; if the URL hasn't fired
+        // `load` within 1.5 s, show a Loading hint over it so the device
+        // doesn't look frozen during a cold start.
+        const hintTimer = setTimeout(() => {
+          this.shell.send({ type: "show_loading_hint", label: target.name });
+        }, 1500);
         const loaded = await this.cdp.waitForLoad(tabId, 4000);
+        clearTimeout(hintTimer);
+        this.shell.send({ type: "hide_loading_hint" });
         if (!loaded) log.warn({ id: target.id }, "url screen did not fire load in 4s; activating anyway");
       }
       tab.lastUsed = Date.now();

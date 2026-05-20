@@ -22,6 +22,8 @@ type CoreMsg =
   | { type: "unload_builtin"; id: string }
   | { type: "show_overlay_image"; dataUrl: string; transitionMs: number }
   | { type: "show_overlay_color"; color: string; transitionMs: number }
+  | { type: "show_loading_hint"; label: string }
+  | { type: "hide_loading_hint" }
   | { type: "hide_overlay"; transitionMs: number };
 
 const builtinsRoot = document.getElementById("builtins")!;
@@ -162,10 +164,35 @@ function handle(msg: CoreMsg) {
     case "show_overlay_color":
       showOverlayColor(msg.color, msg.transitionMs);
       break;
+    case "show_loading_hint":
+      showLoadingHint(msg.label);
+      break;
+    case "hide_loading_hint":
+      hideLoadingHint();
+      break;
     case "hide_overlay":
       hideOverlay(msg.transitionMs);
       break;
   }
+}
+
+let loadingHintEl: HTMLDivElement | null = null;
+function showLoadingHint(label: string) {
+  if (!loadingHintEl) {
+    loadingHintEl = document.createElement("div");
+    loadingHintEl.id = "loading-hint";
+    loadingHintEl.style.cssText =
+      "position:fixed;bottom:2rem;right:2rem;background:rgba(0,0,0,0.6);" +
+      "color:#fff;padding:0.5rem 1rem;border-radius:0.4rem;font-size:1rem;" +
+      "z-index:1000;backdrop-filter:blur(4px);";
+    document.body.appendChild(loadingHintEl);
+  }
+  loadingHintEl.textContent = `Loading ${label}…`;
+  loadingHintEl.style.display = "block";
+}
+
+function hideLoadingHint() {
+  if (loadingHintEl) loadingHintEl.style.display = "none";
 }
 
 window.addEventListener("message", (ev) => {
