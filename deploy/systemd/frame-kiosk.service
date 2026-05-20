@@ -1,0 +1,27 @@
+[Unit]
+Description=Picture Frame kiosk (Cage + Chromium driven by frame-core)
+After=frame-core.service systemd-user-sessions.service
+Requires=frame-core.service
+Wants=graphical.target
+
+[Service]
+Type=simple
+User=frame
+Group=frame
+PAMName=login
+TTYPath=/dev/tty1
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+WorkingDirectory=/home/frame
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+Environment=WLR_LIBINPUT_NO_DEVICES=1
+ExecStartPre=/usr/bin/install -d -m 0700 -o frame -g frame /run/user/%U
+ExecStartPre=/opt/frame/current/deploy/wait-for-core.sh
+ExecStart=/usr/bin/cage -- /opt/frame/current/deploy/launch-chromium.sh
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=60
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,8 @@
+# Picture Frame backlight access for the `frame` group.
+# The install script substitutes @BACKLIGHT@ with the detected backlight
+# device (e.g. intel_backlight, amdgpu_bl0). Wildcards are intentionally
+# avoided here — see SPEC §10.
+SUBSYSTEM=="backlight", KERNEL=="@BACKLIGHT@", RUN+="/bin/chgrp frame /sys/class/backlight/%k/brightness", RUN+="/bin/chmod g+w /sys/class/backlight/%k/brightness"
+
+# Some kernels expose max_brightness as 0444. Make it readable by frame too.
+SUBSYSTEM=="backlight", KERNEL=="@BACKLIGHT@", RUN+="/bin/chgrp frame /sys/class/backlight/%k/max_brightness"

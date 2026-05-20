@@ -1,0 +1,12 @@
+[Unit]
+Description=Restart the picture frame kiosk daily to bound Chromium memory growth
+Documentation=https://github.com/victorDigital/pictureframe
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+RandomizedDelaySec=600
+Persistent=true
+Unit=frame-chromium-restart.service
+
+[Install]
+WantedBy=timers.target

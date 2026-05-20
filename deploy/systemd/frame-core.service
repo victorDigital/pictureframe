@@ -1,0 +1,29 @@
+[Unit]
+Description=Picture Frame core service (HTTP API, CDP, scheduler, updater)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=frame
+Group=frame
+WorkingDirectory=/opt/frame/current
+Environment=NODE_ENV=production
+Environment=FRAME_CONFIG=/etc/frame/frame.yaml
+Environment=FRAME_STATE_DIR=/opt/frame/state
+Environment=FRAME_RELEASES_DIR=/opt/frame/releases
+Environment=FRAME_RUNTIME_DIR=/run/frame
+ExecStart=/usr/bin/node /opt/frame/current/core/dist/index.js
+Restart=on-failure
+RestartSec=3
+LimitNOFILE=8192
+
+# Hardening (the Wayland session lives in frame-kiosk; core only needs files + net)
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/opt/frame /etc/frame /run/frame /var/log
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

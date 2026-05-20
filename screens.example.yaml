@@ -1,0 +1,27 @@
+screens:
+  - id: clock
+    name: Clock
+    type: builtin
+    source: clock
+    config: { face: minimal, show_seconds: false }
+    preload: true
+
+  - id: photos
+    name: Family photos
+    type: builtin
+    source: photos
+    config: { library: immich, interval_sec: 30, transition: kenburns }
+    preload: true
+
+  - id: grafana-home
+    name: Home dashboard
+    type: url
+    source: https://grafana.local/d/abc/home?kiosk
+    preload: true
+    reloadIntervalSec: 60
+
+  - id: now-playing
+    name: Now playing
+    type: builtin
+    source: now-playing
+    preload: true

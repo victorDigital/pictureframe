@@ -1,0 +1,42 @@
+device:
+  name: living-room-frame
+  bearer_token_file: /etc/frame/secrets/bearer_token
+
+display:
+  brightness_backend: backlight       # or "ddcutil"
+  backlight_device: /sys/class/backlight/intel_backlight
+  default_brightness: 60
+
+screens_file: /etc/frame/screens.yaml
+default_screen: clock
+manual_pinned_timeout_hours: 4
+
+scheduler:
+  max_preloaded_url_screens: 5
+
+updater:
+  repo: victorDigital/pictureframe
+  channel: stable
+  poll_interval_min: 15
+  auto_apply: false
+  staging_delay_hours: 24
+  health_check_window_sec: 60
+  retain_releases: 3
+  # signing_key_file: /etc/frame/secrets/release.pub
+
+ha:
+  enabled: true
+  mqtt:
+    host: homeassistant.local
+    port: 1883
+    username: frame
+    password_file: /etc/frame/secrets/mqtt
+    keepalive: 60
+
+vnc:
+  enabled: true
+  password_file: /etc/frame/secrets/vnc
+
+builtins:
+  family_message:
+    enabled: false

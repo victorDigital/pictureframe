@@ -1,0 +1,7 @@
+# Picture Frame sudoers
+# Brightness is NOT in this scope (udev rule grants direct access to
+# /sys/class/backlight/<device>/brightness — see SPEC §10).
+# Wildcards are deliberately avoided.
+frame ALL=(root) NOPASSWD: /usr/bin/systemctl restart frame-core, \
+                            /usr/bin/systemctl restart frame-kiosk, \
+                            /sbin/reboot

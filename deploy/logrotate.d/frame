@@ -1,0 +1,13 @@
+/opt/frame/state/update.log
+/opt/frame/state/migrations/*.log
+{
+    weekly
+    rotate 7
+    maxsize 10M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    create 0640 frame frame
+}

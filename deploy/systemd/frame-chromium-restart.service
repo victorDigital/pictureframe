@@ -1,0 +1,6 @@
+[Unit]
+Description=Daily restart of frame-kiosk to recycle Chromium
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl restart frame-kiosk.service

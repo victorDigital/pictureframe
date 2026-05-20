@@ -1,0 +1,29 @@
+{
+  "name": "picture-frame",
+  "private": true,
+  "version": "0.0.1",
+  "description": "A repurposed laptop turned into a flexible picture-frame appliance.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "core",
+    "kiosk",
+    "web",
+    "builtin-screens/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "dev:core": "npm run dev --workspace core",
+    "dev:web": "npm run dev --workspace web",
+    "dev:kiosk": "npm run dev --workspace kiosk",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
