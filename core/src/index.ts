@@ -3,10 +3,13 @@ import path from "node:path";
 import { ConfigStore } from "./config/state.js";
 import { loadAll } from "./config/load.js";
 import { Scheduler } from "./scheduler/index.js";
+import { CronEngine } from "./scheduler/cron.js";
+import { RuleStore } from "./scheduler/rules.js";
 import { CdpManager } from "./cdp/manager.js";
 import { ScreenController } from "./cdp/screenController.js";
 import { ShellBus } from "./api/shellBus.js";
 import { startServer } from "./api/server.js";
+import { FamilyMessages } from "./api/familyMessage.js";
 import { Updater } from "./updater/index.js";
 import { Brightness } from "./system/brightness.js";
 import { HaBridge } from "./mqtt/index.js";
@@ -48,6 +51,13 @@ async function main() {
     shellUrl: "http://127.0.0.1:8080/shell/",
   });
 
+  const cronEngine = new CronEngine(scheduler);
+  const rulesFile = path.join(path.dirname(paths.configFile), "rules.yaml");
+  const rules = new RuleStore(rulesFile, cronEngine);
+  await rules.load();
+
+  const family = new FamilyMessages(scheduler);
+
   scheduler.on("activate", (screen, claim) => {
     log.info({ screen: screen.id, claim: claim.claimId }, "scheduler activate");
     void screens.show(screen, screen.transitionMs ?? 600);
@@ -61,6 +71,7 @@ async function main() {
   const brightness = new Brightness(store.current.config);
   const updater = new Updater(store, version);
   const vnc = new VncSupervisor();
+  void vnc;
 
   const ha = new HaBridge(store.current.config, scheduler, updater, brightness);
 
@@ -71,16 +82,16 @@ async function main() {
     shell,
     updater,
     brightness,
+    cdp,
+    family,
+    rules,
     version,
   });
 
-  // Apply initial brightness.
   brightness.write(store.current.config.display.default_brightness).catch((err) =>
     log.warn({ err }, "could not apply default brightness"),
   );
 
-  // CDP is only meaningful when chromium is reachable. Failing to spawn
-  // (e.g. local development on macOS) must not bring the API down.
   if (process.env.FRAME_DISABLE_CDP !== "1") {
     cdp
       .start({ shellUrl: "http://127.0.0.1:8080/shell/" })
@@ -99,13 +110,11 @@ async function main() {
     ha.start().catch((err) => log.error({ err }, "ha start failed"));
   }
 
-  // Optional VNC on demand: HTTP `/vnc` triggers; the supervisor remains idle until then.
-  void vnc;
-
   const shutdown = async (signal: string) => {
     log.warn({ signal }, "shutting down");
     ha.stop();
     updater.stop();
+    cronEngine.stop();
     await cdp.stop().catch(() => {});
     process.exit(0);
   };

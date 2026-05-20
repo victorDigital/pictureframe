@@ -1,7 +1,12 @@
 {
   "id": "family-message",
-  "name": "family-message",
-  "description": "LAN-accessible POST endpoint; 1-hour messages.",
-  "stub": true,
-  "config_schema": { "type": "object", "properties": {} }
+  "name": "Family message",
+  "description": "Displays a short message POSTed to the frame's /family-message endpoint. Unauthenticated on the LAN; rate-limited; off by default.",
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "background": { "type": "string", "default": "#0a1f2b" },
+      "color": { "type": "string", "default": "#f5f5f5" }
+    }
+  }
 }

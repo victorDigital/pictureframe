@@ -127,8 +127,23 @@ export class HaBridge {
       this.client!.publish(topic, JSON.stringify(payload), { retain: true });
     };
 
-    const screens = this.scheduler.list();
-    void screens;
+    const screenOptions = (this.scheduler as unknown as { screens: Map<string, { id: string }> })
+      .screens
+      ? Array.from((this.scheduler as unknown as { screens: Map<string, { id: string }> }).screens.values()).map(
+          (s) => s.id,
+        )
+      : [];
+
+    publish("select", "current_screen", {
+      name: "Current screen",
+      command_topic: "frame/cmd/show_screen",
+      command_template: '{"id": "{{ value }}", "claim": "ha"}',
+      state_topic: this.stateTopic("active_screen"),
+      options: screenOptions,
+      unique_id: `${this.nodeId}_current_screen`,
+      availability,
+      device,
+    });
 
     publish("sensor", "active_screen", {
       name: "Active screen",
@@ -179,6 +194,25 @@ export class HaBridge {
       availability,
       device,
     });
+    publish("switch", "display_power", {
+      name: "Display",
+      command_topic: "frame/cmd/display_power",
+      command_template: '{"state": "{{ value }}"}',
+      payload_on: "on",
+      payload_off: "off",
+      state_topic: this.stateTopic("display_power"),
+      unique_id: `${this.nodeId}_display_power`,
+      availability,
+      device,
+    });
+    publish("sensor", "uptime", {
+      name: "Uptime",
+      state_topic: this.stateTopic("uptime"),
+      unit_of_measurement: "s",
+      unique_id: `${this.nodeId}_uptime`,
+      availability,
+      device,
+    });
     publish("button", "reboot", {
       name: "Reboot",
       command_topic: "frame/cmd/reboot",
@@ -220,6 +254,7 @@ export class HaBridge {
     this.client.publish(this.stateTopic("mqtt_auth_ok"), this.state === "auth_failed" ? "false" : "true", {
       retain: true,
     });
+    this.client.publish(this.stateTopic("uptime"), String(Math.round(process.uptime())));
     try {
       const b = await this.brightness.read();
       this.client.publish(this.stateTopic("brightness"), String(b), { retain: true });

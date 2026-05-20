@@ -19,6 +19,12 @@ export class CdpManager extends EventEmitter {
   private chromium?: ChromiumProcess;
   private targets = new Map<TabId, TargetInfo>();
   private sessions = new Map<TabId, string>();
+  private loadResolvers = new Map<TabId, Array<() => void>>();
+  private consoleByTab = new Map<TabId, Array<{ level: string; text: string }>>();
+
+  isConnected(): boolean {
+    return Boolean(this.transport);
+  }
 
   async start(opts: {
     chromiumBin?: string;
@@ -65,8 +71,68 @@ export class CdpManager extends EventEmitter {
         this.sessions.set(targetInfo.targetId, sessionId);
         break;
       }
+      case "Page.loadEventFired": {
+        const tabId = this.tabIdForSession(msg.sessionId);
+        if (tabId) {
+          const list = this.loadResolvers.get(tabId);
+          if (list) {
+            this.loadResolvers.delete(tabId);
+            for (const r of list) r();
+          }
+        }
+        break;
+      }
+      case "Runtime.consoleAPICalled": {
+        const tabId = this.tabIdForSession(msg.sessionId);
+        if (tabId) {
+          const buf = this.consoleByTab.get(tabId) ?? [];
+          buf.push({
+            level: msg.params.type,
+            text: (msg.params.args ?? [])
+              .map((a: { value?: unknown; description?: unknown }) => a.value ?? a.description ?? "")
+              .join(" "),
+          });
+          if (buf.length > 50) buf.shift();
+          this.consoleByTab.set(tabId, buf);
+        }
+        break;
+      }
     }
     this.emit("cdp_event", msg);
+  }
+
+  private tabIdForSession(sessionId?: string): TabId | undefined {
+    if (!sessionId) return undefined;
+    for (const [tabId, sid] of this.sessions) {
+      if (sid === sessionId) return tabId;
+    }
+    return undefined;
+  }
+
+  async waitForLoad(tabId: TabId, timeoutMs: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const t = setTimeout(() => {
+        const list = this.loadResolvers.get(tabId);
+        if (list) {
+          this.loadResolvers.set(
+            tabId,
+            list.filter((r) => r !== resolver),
+          );
+        }
+        resolve(false);
+      }, timeoutMs);
+      const resolver = () => {
+        clearTimeout(t);
+        resolve(true);
+      };
+      const list = this.loadResolvers.get(tabId) ?? [];
+      list.push(resolver);
+      this.loadResolvers.set(tabId, list);
+    });
+  }
+
+  consoleSnapshot(tabId: TabId): Array<{ level: string; text: string }> {
+    return [...(this.consoleByTab.get(tabId) ?? [])];
   }
 
   private async attach(targetId: string) {
@@ -102,8 +168,12 @@ export class CdpManager extends EventEmitter {
     await this.transport!.send("Target.activateTarget", { targetId: tabId });
   }
 
-  async navigate(tabId: TabId, url: string) {
-    await this.send(tabId, "Page.navigate", { url });
+  async navigate(tabId: TabId, url: string): Promise<{ frameId?: string; loaderId?: string; errorText?: string }> {
+    return this.send(tabId, "Page.navigate", { url });
+  }
+
+  async getTargetInfo(tabId: TabId): Promise<TargetInfo | undefined> {
+    return this.targets.get(tabId);
   }
 
   async reload(tabId: TabId) {

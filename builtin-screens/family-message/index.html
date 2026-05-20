@@ -2,20 +2,50 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>family-message</title>
+    <title>Family message</title>
     <style>
-      html,body{margin:0;height:100%;background:#0a0a0a;color:#888;font-family:ui-sans-serif,system-ui,sans-serif;}
-      body{display:grid;place-items:center;}
-      .panel{text-align:center;}
-      h1{font-weight:300;font-size:clamp(2rem,4vw,3rem);margin:0;color:#ccc;}
-      p{opacity:0.6;margin-top:1rem;}
+      :root { color-scheme: dark; }
+      html, body { margin: 0; height: 100%; background: var(--bg, #0a1f2b); color: var(--fg, #f5f5f5); font-family: ui-sans-serif, system-ui, sans-serif; overflow: hidden; }
+      body { display: grid; place-items: center; padding: 4rem; box-sizing: border-box; }
+      .msg { font-size: clamp(2rem, 6vw, 6rem); line-height: 1.2; text-align: center; max-width: 50rem; }
+      .meta { position: fixed; bottom: 2rem; left: 0; right: 0; text-align: center; opacity: 0.55; font-size: 1rem; }
+      .empty { opacity: 0.4; font-size: 1.5rem; }
     </style>
   </head>
   <body>
-    <div class="panel">
-      <h1>family-message</h1>
-      <p>Stub. Implementation pending — see SPEC §7.</p>
-    </div>
-    <script>parent.postMessage({type:"builtin_ready",id:"family-message"},"*");</script>
+    <div class="msg" id="msg"></div>
+    <div class="meta" id="meta"></div>
+    <script>
+      const params = new URLSearchParams(location.search);
+      let config = {};
+      try { config = JSON.parse(params.get("config") || "{}"); } catch (e) {}
+      if (config.background) document.body.style.setProperty("--bg", config.background);
+      if (config.color) document.body.style.setProperty("--fg", config.color);
+
+      async function refresh() {
+        try {
+          const r = await fetch("/api/family_message/current");
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          const data = await r.json();
+          if (data.message) {
+            document.getElementById("msg").textContent = data.message;
+            const when = new Date(data.posted_at);
+            const remaining = Math.max(0, data.expires_at - Date.now());
+            const min = Math.round(remaining / 60000);
+            document.getElementById("meta").textContent =
+              "Posted " + when.toLocaleTimeString() + " — visible for " + min + " min";
+          } else {
+            document.getElementById("msg").innerHTML = '<span class="empty">No message.</span>';
+            document.getElementById("meta").textContent = "";
+          }
+        } catch (e) {
+          document.getElementById("msg").innerHTML = '<span class="empty">' + e + '</span>';
+        }
+      }
+
+      refresh();
+      setInterval(refresh, 10000);
+      parent.postMessage({ type: "builtin_ready", id: "family-message" }, "*");
+    </script>
   </body>
 </html>

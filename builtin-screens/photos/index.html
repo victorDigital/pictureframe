@@ -2,20 +2,155 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>photos</title>
+    <title>Photos</title>
     <style>
-      html,body{margin:0;height:100%;background:#0a0a0a;color:#888;font-family:ui-sans-serif,system-ui,sans-serif;}
-      body{display:grid;place-items:center;}
-      .panel{text-align:center;}
-      h1{font-weight:300;font-size:clamp(2rem,4vw,3rem);margin:0;color:#ccc;}
-      p{opacity:0.6;margin-top:1rem;}
+      :root { color-scheme: dark; }
+      html, body { margin: 0; height: 100%; background: #000; color: #ccc; font-family: ui-sans-serif, system-ui, sans-serif; overflow: hidden; }
+      .frame { position: fixed; inset: 0; }
+      img.slide {
+        position: absolute; inset: 0;
+        width: 100%; height: 100%; object-fit: cover;
+        opacity: 0;
+        transition: opacity var(--fade, 1500ms) ease;
+        will-change: opacity, transform;
+      }
+      img.slide.kenburns { animation: kenburns var(--kb-duration, 30s) linear forwards; }
+      @keyframes kenburns {
+        from { transform: scale(1.05) translate(-1%, -1%); }
+        to   { transform: scale(1.15) translate(1%, 1%); }
+      }
+      .err {
+        position: fixed; inset: 0;
+        display: grid; place-items: center;
+        color: #ff9b9b;
+        font-size: 1.5rem;
+      }
     </style>
   </head>
   <body>
-    <div class="panel">
-      <h1>photos</h1>
-      <p>Stub. Implementation pending — see SPEC §7.</p>
-    </div>
-    <script>parent.postMessage({type:"builtin_ready",id:"photos"},"*");</script>
+    <div class="frame" id="frame"></div>
+    <div class="err" id="err" style="display:none"></div>
+    <script>
+      const params = new URLSearchParams(location.search);
+      let config = {};
+      try { config = JSON.parse(params.get("config") || "{}"); } catch (e) {}
+      const frame = document.getElementById("frame");
+      const err = document.getElementById("err");
+      const interval = (config.interval_sec || 30) * 1000;
+      document.documentElement.style.setProperty("--kb-duration", interval + "ms");
+
+      async function loadList() {
+        if (config.library === "immich") {
+          if (!config.immich_base_url || !config.immich_api_key) {
+            throw new Error("Configure immich_base_url and immich_api_key");
+          }
+          const headers = { "x-api-key": config.immich_api_key };
+          if (config.immich_album_id) {
+            const r = await fetch(config.immich_base_url + "/api/album/" + config.immich_album_id, { headers });
+            if (!r.ok) throw new Error("Immich album HTTP " + r.status);
+            const album = await r.json();
+            return album.assets.map(a => ({
+              src: config.immich_base_url + "/api/asset/file/" + a.id + "?isThumb=false",
+              api: true
+            }));
+          }
+          const r = await fetch(config.immich_base_url + "/api/asset?type=IMAGE", { headers });
+          if (!r.ok) throw new Error("Immich asset HTTP " + r.status);
+          const list = await r.json();
+          return list.slice(0, 200).map(a => ({
+            src: config.immich_base_url + "/api/asset/file/" + a.id + "?isThumb=false",
+            api: true
+          }));
+        }
+        if (config.library === "local") {
+          if (!config.local_index_url) throw new Error("Configure local_index_url");
+          const r = await fetch(config.local_index_url);
+          if (!r.ok) throw new Error("Local HTTP " + r.status);
+          const list = await r.json();
+          return list.map(src => ({ src, api: false }));
+        }
+        if (config.library === "google") {
+          throw new Error("Google Photos backend is best-effort; switch to Immich (see SPEC §11).");
+        }
+        throw new Error("Unknown library: " + config.library);
+      }
+
+      async function fetchImage(item) {
+        if (!item.api) return item.src;
+        const headers = { "x-api-key": config.immich_api_key };
+        const r = await fetch(item.src, { headers });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const blob = await r.blob();
+        return URL.createObjectURL(blob);
+      }
+
+      function shuffle(a) {
+        for (let i = a.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+      }
+
+      async function run() {
+        let list;
+        try {
+          list = await loadList();
+        } catch (e) {
+          err.textContent = String(e);
+          err.style.display = "grid";
+          return;
+        }
+        if (!list.length) {
+          err.textContent = "No photos in library.";
+          err.style.display = "grid";
+          return;
+        }
+        shuffle(list);
+
+        const transition = config.transition || "kenburns";
+        let active = null;
+        let i = 0;
+
+        async function next() {
+          const item = list[i % list.length];
+          i++;
+          let src;
+          try {
+            src = await fetchImage(item);
+          } catch (e) {
+            console.error("photo fetch failed", e);
+            setTimeout(next, 2000);
+            return;
+          }
+          const img = document.createElement("img");
+          img.className = "slide" + (transition === "kenburns" ? " kenburns" : "");
+          img.src = src;
+          img.onload = () => {
+            frame.appendChild(img);
+            requestAnimationFrame(() => {
+              img.style.opacity = 1;
+              if (active) active.style.opacity = 0;
+              setTimeout(() => {
+                if (active) {
+                  if (active.src.startsWith("blob:")) URL.revokeObjectURL(active.src);
+                  active.remove();
+                }
+                active = img;
+              }, 1500);
+            });
+            setTimeout(next, interval);
+          };
+          img.onerror = () => {
+            console.error("photo load failed", item.src);
+            setTimeout(next, 1000);
+          };
+        }
+        next();
+      }
+
+      run();
+      parent.postMessage({ type: "builtin_ready", id: "photos" }, "*");
+    </script>
   </body>
 </html>

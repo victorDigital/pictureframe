@@ -2,20 +2,98 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>now-playing</title>
+    <title>Now playing</title>
     <style>
-      html,body{margin:0;height:100%;background:#0a0a0a;color:#888;font-family:ui-sans-serif,system-ui,sans-serif;}
-      body{display:grid;place-items:center;}
-      .panel{text-align:center;}
-      h1{font-weight:300;font-size:clamp(2rem,4vw,3rem);margin:0;color:#ccc;}
-      p{opacity:0.6;margin-top:1rem;}
+      :root { color-scheme: dark; }
+      html, body { margin: 0; height: 100%; background: #000; color: #fff; font-family: ui-sans-serif, system-ui, sans-serif; overflow: hidden; }
+      .bg { position: fixed; inset: -5%; background-size: cover; background-position: center; filter: blur(48px) brightness(0.5); transform: scale(1.1); transition: background-image 800ms ease; }
+      .panel { position: fixed; inset: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6vw; padding: 8vh 6vw; box-sizing: border-box; align-items: center; }
+      .art { aspect-ratio: 1 / 1; max-width: 70vh; justify-self: end; background: #111; border-radius: 1rem; background-size: cover; background-position: center; box-shadow: 0 1.5rem 4rem rgba(0,0,0,0.6); }
+      .info { max-width: 30rem; }
+      .title { font-size: clamp(2rem, 4vw, 4rem); font-weight: 300; line-height: 1.1; letter-spacing: -0.02em; }
+      .artist { font-size: clamp(1.25rem, 2vw, 2rem); opacity: 0.75; margin-top: 0.75rem; }
+      .album { font-size: clamp(1rem, 1.5vw, 1.5rem); opacity: 0.55; margin-top: 0.25rem; }
+      .progress { margin-top: 2rem; height: 0.25rem; background: rgba(255,255,255,0.15); border-radius: 1rem; overflow: hidden; }
+      .progress > div { height: 100%; background: #fff; width: 0%; transition: width 400ms linear; }
+      .empty { position: fixed; inset: 0; display: grid; place-items: center; opacity: 0.5; font-size: 1.5rem; }
     </style>
   </head>
   <body>
-    <div class="panel">
-      <h1>now-playing</h1>
-      <p>Stub. Implementation pending — see SPEC §7.</p>
+    <div class="bg" id="bg"></div>
+    <div class="panel" id="panel" style="display:none">
+      <div class="art" id="art"></div>
+      <div class="info">
+        <div class="title" id="title"></div>
+        <div class="artist" id="artist"></div>
+        <div class="album" id="album"></div>
+        <div class="progress" id="progress"><div></div></div>
+      </div>
     </div>
-    <script>parent.postMessage({type:"builtin_ready",id:"now-playing"},"*");</script>
+    <div class="empty" id="empty">Nothing is playing.</div>
+    <script>
+      const params = new URLSearchParams(location.search);
+      let config = {};
+      try { config = JSON.parse(params.get("config") || "{}"); } catch (e) {}
+
+      const $ = (id) => document.getElementById(id);
+      let progressTimer = null;
+
+      function render(state) {
+        if (!state || state.state !== "playing") {
+          $("panel").style.display = "none";
+          $("empty").style.display = "grid";
+          $("bg").style.backgroundImage = "";
+          return;
+        }
+        $("empty").style.display = "none";
+        $("panel").style.display = "grid";
+        $("title").textContent = state.title || "";
+        $("artist").textContent = state.artist || "";
+        $("album").textContent = state.album || "";
+        const art = state.entity_picture || "";
+        $("art").style.backgroundImage = art ? "url(" + art + ")" : "none";
+        if (config.blur_background !== false) {
+          $("bg").style.backgroundImage = art ? "url(" + art + ")" : "none";
+        }
+
+        clearInterval(progressTimer);
+        if (config.show_progress !== false && state.duration && state.position != null) {
+          const startedAt = Date.now() - state.position * 1000;
+          const duration = state.duration * 1000;
+          const update = () => {
+            const elapsed = Date.now() - startedAt;
+            const pct = Math.min(100, (elapsed / duration) * 100);
+            $("progress").firstElementChild.style.width = pct + "%";
+            if (pct >= 100) clearInterval(progressTimer);
+          };
+          update();
+          progressTimer = setInterval(update, 500);
+        } else {
+          $("progress").firstElementChild.style.width = "0%";
+        }
+      }
+
+      // The shell forwards relevant messages via window.postMessage so URL
+      // tabs can talk to us without their own WebSocket. We also accept
+      // direct postMessage payloads from the parent for development.
+      window.addEventListener("message", (ev) => {
+        if (ev.data?.type === "now_playing") render(ev.data.state);
+      });
+
+      // Poll frame-core's /api/now_playing as a fallback so the page works
+      // even without explicit MQTT push wiring (development convenience).
+      async function poll() {
+        try {
+          const r = await fetch("/api/now_playing");
+          if (r.ok) render(await r.json());
+        } catch (e) {
+          // ignore; HA may not be wired yet
+        }
+      }
+      poll();
+      setInterval(poll, 5000);
+
+      parent.postMessage({ type: "builtin_ready", id: "now-playing" }, "*");
+    </script>
   </body>
 </html>

@@ -6,6 +6,7 @@ import { SystemSection } from "./components/SystemSection.js";
 import { UpdatesSection } from "./components/UpdatesSection.js";
 import { VncSection } from "./components/VncSection.js";
 import { SettingsSection } from "./components/SettingsSection.js";
+import { RulesSection } from "./components/RulesSection.js";
 
 type Tab = "now" | "screens" | "rules" | "system" | "updates" | "vnc" | "settings";
 
@@ -55,16 +56,6 @@ export function App() {
         {tab === "vnc" && <VncSection />}
         {tab === "settings" && <SettingsSection onSignOut={() => { setToken(null); setAuthed(false); }} />}
       </main>
-    </div>
-  );
-}
-
-function RulesSection() {
-  return (
-    <div className="tile">
-      <h2>Schedules &amp; rules</h2>
-      <p>Cron-based scheduled claims and programmatic triggers. See SPEC §4.7.</p>
-      <p style={{ color: "var(--muted)" }}>UI pending.</p>
     </div>
   );
 }

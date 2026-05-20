@@ -82,7 +82,8 @@ export class ScreenController {
         const tabId = await this.cdp.newTab(target.source);
         tab = { tabId, lastUsed: Date.now() };
         this.urlTabs.set(target.id, tab);
-        await this.waitForLoad(tabId, 4000);
+        const loaded = await this.cdp.waitForLoad(tabId, 4000);
+        if (!loaded) log.warn({ id: target.id }, "url screen did not fire load in 4s; activating anyway");
       }
       tab.lastUsed = Date.now();
       await this.cdp.activate(tab.tabId);
@@ -108,7 +109,48 @@ export class ScreenController {
     }
   }
 
-  private async waitForLoad(_tabId: TabId, timeoutMs: number) {
-    return new Promise<void>((resolve) => setTimeout(resolve, timeoutMs));
+  async testUrlScreen(screen: Screen): Promise<{
+    ok: boolean;
+    httpStatus?: number;
+    finalUrl?: string;
+    loaded: boolean;
+    consoleErrors: string[];
+    screenshot?: string;
+    error?: string;
+  }> {
+    if (screen.type !== "url") {
+      return { ok: false, loaded: false, consoleErrors: [], error: "not_a_url_screen" };
+    }
+    let tabId: string | undefined;
+    try {
+      const headRes = await fetch(screen.source, { method: "HEAD", redirect: "follow" }).catch(
+        () => null,
+      );
+      tabId = await this.cdp.newTab(screen.source);
+      const loaded = await this.cdp.waitForLoad(tabId, 10_000);
+      const info = await this.cdp.getTargetInfo(tabId);
+      let screenshot: string | undefined;
+      try {
+        screenshot = await this.cdp.screenshot(tabId);
+      } catch {
+        // ignore
+      }
+      const consoleErrors = this.cdp
+        .consoleSnapshot(tabId)
+        .filter((c) => c.level === "error" || c.level === "warning")
+        .map((c) => c.text);
+      return {
+        ok: loaded,
+        httpStatus: headRes?.status,
+        finalUrl: info?.url ?? screen.source,
+        loaded,
+        consoleErrors,
+        screenshot,
+      };
+    } catch (err) {
+      return { ok: false, loaded: false, consoleErrors: [], error: String(err) };
+    } finally {
+      if (tabId) await this.cdp.closeTab(tabId).catch(() => undefined);
+    }
   }
 }

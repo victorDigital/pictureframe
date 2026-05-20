@@ -1,7 +1,16 @@
 {
   "id": "weather",
-  "name": "weather",
-  "description": "Current conditions + forecast from Open-Meteo.",
-  "stub": true,
-  "config_schema": { "type": "object", "properties": {} }
+  "name": "Weather",
+  "description": "Current conditions + 5-day forecast from Open-Meteo (no API key required).",
+  "config_schema": {
+    "type": "object",
+    "required": ["latitude", "longitude"],
+    "properties": {
+      "latitude": { "type": "number" },
+      "longitude": { "type": "number" },
+      "location_label": { "type": "string", "default": "" },
+      "units": { "type": "string", "enum": ["metric", "imperial"], "default": "metric" },
+      "forecast_days": { "type": "integer", "minimum": 1, "maximum": 7, "default": 5 }
+    }
+  }
 }

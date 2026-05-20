@@ -1,7 +1,21 @@
 {
   "id": "photos",
-  "name": "photos",
-  "description": "Photo slideshow (Immich / local directory / Google Photos backends).",
-  "stub": true,
-  "config_schema": { "type": "object", "properties": {} }
+  "name": "Photos",
+  "description": "Photo slideshow. Backends: Immich (recommended), local directory, Google Photos (best-effort — see SPEC §11).",
+  "config_schema": {
+    "type": "object",
+    "required": ["library"],
+    "properties": {
+      "library": { "type": "string", "enum": ["immich", "local", "google"], "default": "immich" },
+      "interval_sec": { "type": "integer", "minimum": 5, "default": 30 },
+      "transition": { "type": "string", "enum": ["fade", "kenburns", "none"], "default": "kenburns" },
+      "immich_base_url": { "type": "string", "description": "e.g. https://immich.local" },
+      "immich_api_key": { "type": "string", "description": "Immich API key with album/asset read scope" },
+      "immich_album_id": { "type": "string", "description": "Optional — restrict to one album" },
+      "local_index_url": {
+        "type": "string",
+        "description": "URL returning a JSON array of image URLs (served by your reverse proxy or rclone http)"
+      }
+    }
+  }
 }

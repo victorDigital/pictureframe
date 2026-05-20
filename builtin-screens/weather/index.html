@@ -2,20 +2,113 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>weather</title>
+    <title>Weather</title>
     <style>
-      html,body{margin:0;height:100%;background:#0a0a0a;color:#888;font-family:ui-sans-serif,system-ui,sans-serif;}
-      body{display:grid;place-items:center;}
-      .panel{text-align:center;}
-      h1{font-weight:300;font-size:clamp(2rem,4vw,3rem);margin:0;color:#ccc;}
-      p{opacity:0.6;margin-top:1rem;}
+      :root { color-scheme: dark; }
+      html, body { margin: 0; height: 100%; background: #0c1117; color: #e6e8ec; font-family: ui-sans-serif, system-ui, sans-serif; }
+      body { display: grid; grid-template-rows: 1fr auto; padding: 4vh 6vw; box-sizing: border-box; }
+      .now { display: grid; grid-template-columns: auto 1fr; gap: 4vw; align-items: center; }
+      .icon { font-size: 22vw; line-height: 1; }
+      .temp { font-size: 14vw; font-weight: 200; line-height: 1; letter-spacing: -0.04em; }
+      .label { font-size: 2.5vw; opacity: 0.7; margin-top: 0.5rem; }
+      .summary { font-size: 2.5vw; opacity: 0.8; margin-top: 1rem; }
+      .forecast { display: flex; gap: 1.5vw; margin-top: 2rem; }
+      .day { background: rgba(255,255,255,0.05); border-radius: 0.6rem; padding: 1.2rem; flex: 1; text-align: center; }
+      .day .name { opacity: 0.7; font-size: 1.5vw; }
+      .day .ic { font-size: 4vw; margin: 0.5rem 0; }
+      .day .hi { font-size: 2vw; }
+      .day .lo { opacity: 0.6; font-size: 1.5vw; }
+      .err { color: #ff9b9b; }
     </style>
   </head>
   <body>
-    <div class="panel">
-      <h1>weather</h1>
-      <p>Stub. Implementation pending — see SPEC §7.</p>
+    <div class="now">
+      <div class="icon" id="icon">…</div>
+      <div>
+        <div class="temp"><span id="temp">--</span><span id="unit">°</span></div>
+        <div class="label" id="label"></div>
+        <div class="summary" id="summary"></div>
+      </div>
     </div>
-    <script>parent.postMessage({type:"builtin_ready",id:"weather"},"*");</script>
+    <div class="forecast" id="forecast"></div>
+    <script>
+      const params = new URLSearchParams(location.search);
+      let config = {};
+      try { config = JSON.parse(params.get("config") || "{}"); } catch (e) {}
+      const ICONS = {
+        0: "☀️", 1: "🌤️", 2: "⛅", 3: "☁️",
+        45: "🌫️", 48: "🌫️",
+        51: "🌦️", 53: "🌦️", 55: "🌦️", 56: "🌧️", 57: "🌧️",
+        61: "🌧️", 63: "🌧️", 65: "🌧️", 66: "🌧️", 67: "🌧️",
+        71: "🌨️", 73: "🌨️", 75: "❄️", 77: "🌨️",
+        80: "🌧️", 81: "🌧️", 82: "🌧️",
+        85: "🌨️", 86: "❄️",
+        95: "⛈️", 96: "⛈️", 99: "⛈️"
+      };
+      const SUMMARY = {
+        0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
+        45: "Foggy", 48: "Rime fog",
+        51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle",
+        61: "Light rain", 63: "Rain", 65: "Heavy rain",
+        71: "Light snow", 73: "Snow", 75: "Heavy snow",
+        80: "Showers", 81: "Heavy showers", 82: "Violent showers",
+        95: "Thunderstorm", 96: "Thunderstorm with hail", 99: "Severe thunderstorm"
+      };
+
+      async function load() {
+        if (config.latitude == null || config.longitude == null) {
+          document.getElementById("summary").innerHTML =
+            '<span class="err">Configure latitude and longitude.</span>';
+          return;
+        }
+        const units = config.units || "metric";
+        const tempUnit = units === "imperial" ? "fahrenheit" : "celsius";
+        const url = new URL("https://api.open-meteo.com/v1/forecast");
+        url.searchParams.set("latitude", config.latitude);
+        url.searchParams.set("longitude", config.longitude);
+        url.searchParams.set("current", "temperature_2m,weather_code,apparent_temperature");
+        url.searchParams.set("daily", "weather_code,temperature_2m_max,temperature_2m_min");
+        url.searchParams.set("forecast_days", String(config.forecast_days || 5));
+        url.searchParams.set("temperature_unit", tempUnit);
+        url.searchParams.set("timezone", "auto");
+
+        try {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          render(await res.json());
+        } catch (err) {
+          document.getElementById("summary").innerHTML =
+            '<span class="err">Could not load weather: ' + err + '</span>';
+        }
+      }
+
+      function render(data) {
+        const code = data.current.weather_code;
+        document.getElementById("icon").textContent = ICONS[code] || "?";
+        document.getElementById("temp").textContent = Math.round(data.current.temperature_2m);
+        document.getElementById("unit").textContent = data.current_units.temperature_2m;
+        document.getElementById("label").textContent =
+          config.location_label || (config.latitude.toFixed(2) + ", " + config.longitude.toFixed(2));
+        document.getElementById("summary").textContent = SUMMARY[code] || "";
+
+        const forecast = document.getElementById("forecast");
+        forecast.innerHTML = "";
+        for (let i = 0; i < data.daily.time.length; i++) {
+          const day = document.createElement("div");
+          day.className = "day";
+          const d = new Date(data.daily.time[i]);
+          day.innerHTML =
+            '<div class="name">' + d.toLocaleDateString(undefined, { weekday: "short" }) + "</div>" +
+            '<div class="ic">' + (ICONS[data.daily.weather_code[i]] || "?") + "</div>" +
+            '<div class="hi">' + Math.round(data.daily.temperature_2m_max[i]) + "°</div>" +
+            '<div class="lo">' + Math.round(data.daily.temperature_2m_min[i]) + "°</div>";
+          forecast.appendChild(day);
+        }
+      }
+
+      load();
+      setInterval(load, 15 * 60 * 1000);
+      parent.postMessage({ type: "builtin_ready", id: "weather" }, "*");
+    </script>
   </body>
 </html>
