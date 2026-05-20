@@ -16,13 +16,15 @@ jobs:
           node-version: 22
           cache: npm
       - name: Install
-        run: npm install
+        # npm ci respects package-lock.json exactly — catches lockfile drift
+        # in PRs (npm install would silently rewrite it).
+        run: npm ci
       - name: Typecheck
         run: npm run typecheck --if-present --workspaces
+      - name: Test
+        run: npm run test --if-present --workspaces
       - name: Build
         run: npm run build --if-present --workspaces
-      - name: Test
-        run: npm test --if-present --workspaces
 
   shellcheck:
     runs-on: ubuntu-24.04
