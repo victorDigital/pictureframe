@@ -35,8 +35,7 @@ export function NowSection() {
     refresh();
 
     // Subscribe to /api/events for live push. The full refresh above seeds
-    // the initial view; subsequent activate / release events arrive over WS
-    // and we re-fetch /api/state to pick up brightness/updater drift too.
+    // the initial view; subsequent activate / release events arrive inline.
     const token = getToken();
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     const url = `${proto}//${location.host}/api/events?token=${encodeURIComponent(token ?? "")}`;
@@ -44,8 +43,26 @@ export function NowSection() {
     wsRef.current = ws;
     ws.onmessage = (ev) => {
       try {
-        const msg = JSON.parse(ev.data) as { type?: string };
-        if (msg.type === "state") void refresh();
+        const msg = JSON.parse(ev.data) as {
+          type?: string;
+          payload?: {
+            active: string | null;
+            claims: State["claims"];
+            brightness?: number | null;
+          };
+        };
+        if (msg.type !== "state" || !msg.payload) return;
+        const p = msg.payload;
+        setState((prev) =>
+          prev
+            ? {
+                ...prev,
+                active: p.active,
+                claims: p.claims,
+                brightness: p.brightness ?? prev.brightness,
+              }
+            : prev,
+        );
       } catch {
         // ignore
       }

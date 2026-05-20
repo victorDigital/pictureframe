@@ -41,7 +41,7 @@ export class CdpManager extends EventEmitter {
     this.transport.on("event", (m) => this.onEvent(m as never));
     this.chromium.on("exit", () => this.emit("chromium_exit"));
 
-    await this.transport.send("Target.setDiscoverDiscoveryEnabled", { discover: true });
+    await this.transport.send("Target.setDiscoverTargets", { discover: true });
     const { targetInfos } = await this.transport.send<{ targetInfos: TargetInfo[] }>(
       "Target.getTargets",
     );

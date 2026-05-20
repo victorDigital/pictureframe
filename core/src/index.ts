@@ -59,27 +59,39 @@ async function main() {
   await rules.load();
 
   const family = new FamilyMessages(scheduler);
+  const brightness = new Brightness(store.current.config);
+  const updater = new Updater(store, version);
+  const vnc = new VncSupervisor(store.current.config.vnc?.password_file);
+
+  async function pushState(activeId: string | null) {
+    let brightnessValue: number | null = null;
+    try {
+      brightnessValue = await brightness.read();
+    } catch {
+      // brightness readout can fail before udev rules are loaded; that
+      // shouldn't suppress the push
+    }
+    stateBus.broadcast({
+      type: "state",
+      payload: {
+        active: activeId,
+        claims: scheduler.list(),
+        brightness: brightnessValue,
+        update: updater.status(),
+      },
+    });
+  }
 
   scheduler.on("activate", (screen, claim) => {
     log.info({ screen: screen.id, claim: claim.claimId }, "scheduler activate");
     void screens.show(screen, screen.transitionMs ?? 600);
-    stateBus.broadcast({
-      type: "state",
-      payload: {
-        active: screen.id,
-        claims: scheduler.list(),
-      },
-    });
+    void pushState(screen.id);
   });
 
   store.on("reloaded", (state) => {
     scheduler.setScreens(state.screens);
     screens.registerScreens(state.screens);
   });
-
-  const brightness = new Brightness(store.current.config);
-  const updater = new Updater(store, version);
-  const vnc = new VncSupervisor(store.current.config.vnc?.password_file);
 
   const ha = new HaBridge(store.current.config, scheduler, updater, brightness);
 

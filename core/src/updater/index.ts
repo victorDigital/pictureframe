@@ -44,8 +44,9 @@ export class Updater {
   constructor(
     private store: ConfigStore,
     private currentVersion: string,
+    gh?: GitHubClient,
   ) {
-    this.gh = new GitHubClient(store.current.config.updater.repo);
+    this.gh = gh ?? new GitHubClient(store.current.config.updater.repo);
     this.status_ = {
       current: currentVersion,
       busy: false,

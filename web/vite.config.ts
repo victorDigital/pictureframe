@@ -10,6 +10,7 @@ export default defineConfig({
   server: {
     port: 5181,
     proxy: {
+      "/api/events": { target: "ws://localhost:8080", ws: true },
       "/api": "http://localhost:8080",
       "/ws": { target: "ws://localhost:8080", ws: true },
       "/healthz": "http://localhost:8080",
