@@ -2,20 +2,80 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>status-board</title>
+    <title>Status board</title>
     <style>
-      html,body{margin:0;height:100%;background:#0a0a0a;color:#888;font-family:ui-sans-serif,system-ui,sans-serif;}
-      body{display:grid;place-items:center;}
-      .panel{text-align:center;}
-      h1{font-weight:300;font-size:clamp(2rem,4vw,3rem);margin:0;color:#ccc;}
-      p{opacity:0.6;margin-top:1rem;}
+      :root { color-scheme: dark; }
+      html, body { margin: 0; height: 100%; background: #0a0d12; color: #e6e8ec; font-family: ui-sans-serif, system-ui, sans-serif; }
+      body { padding: 4vh 5vw; box-sizing: border-box; display: grid; align-content: start; gap: 2vh; }
+      .grid { display: grid; gap: 1.5vw; grid-template-columns: repeat(var(--cols, 3), 1fr); }
+      .tile {
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.07);
+        border-radius: 0.8rem;
+        padding: 1.5vw;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: 0.5rem;
+        min-height: 16vh;
+      }
+      .tile .icon { font-size: 3vw; opacity: 0.8; }
+      .tile .value { font-size: 4vw; font-weight: 300; line-height: 1; letter-spacing: -0.02em; }
+      .tile .unit { font-size: 1.5vw; opacity: 0.5; margin-left: 0.25rem; }
+      .tile .label { font-size: 1.5vw; opacity: 0.65; }
+      .err { color: #ff9b9b; }
     </style>
   </head>
   <body>
-    <div class="panel">
-      <h1>status-board</h1>
-      <p>Stub. Implementation pending — see SPEC §7.</p>
-    </div>
-    <script>parent.postMessage({type:"builtin_ready",id:"status-board"},"*");</script>
+    <div class="grid" id="grid"></div>
+    <script>
+      const params = new URLSearchParams(location.search);
+      let config = {};
+      try { config = JSON.parse(params.get("config") || "{}"); } catch (e) {}
+      const grid = document.getElementById("grid");
+      grid.style.setProperty("--cols", config.columns || 3);
+
+      async function refresh() {
+        if (!config.ha_base_url || !config.ha_token || !Array.isArray(config.entities)) {
+          grid.innerHTML = '<div class="tile err">Configure ha_base_url, ha_token and entities.</div>';
+          return;
+        }
+        const headers = {
+          "Authorization": "Bearer " + config.ha_token,
+          "Content-Type": "application/json"
+        };
+        const results = await Promise.all(config.entities.map(async (e) => {
+          try {
+            const r = await fetch(config.ha_base_url + "/api/states/" + encodeURIComponent(e.id), { headers });
+            if (!r.ok) return { entity: e, error: "HTTP " + r.status };
+            return { entity: e, state: await r.json() };
+          } catch (err) {
+            return { entity: e, error: String(err) };
+          }
+        }));
+
+        grid.innerHTML = "";
+        for (const r of results) {
+          const tile = document.createElement("div");
+          tile.className = "tile";
+          if (r.error) {
+            tile.innerHTML =
+              '<div class="icon">' + (r.entity.icon || "⚠️") + '</div>' +
+              '<div class="value err">' + r.error + '</div>' +
+              '<div class="label">' + (r.entity.label || r.entity.id) + '</div>';
+          } else {
+            const unit = r.entity.unit || r.state.attributes.unit_of_measurement || "";
+            tile.innerHTML =
+              '<div class="icon">' + (r.entity.icon || "•") + '</div>' +
+              '<div class="value">' + r.state.state + (unit ? '<span class="unit">' + unit + '</span>' : "") + '</div>' +
+              '<div class="label">' + (r.entity.label || r.state.attributes.friendly_name || r.entity.id) + '</div>';
+          }
+          grid.appendChild(tile);
+        }
+      }
+
+      refresh();
+      setInterval(refresh, 30000);
+      parent.postMessage({ type: "builtin_ready", id: "status-board" }, "*");
+    </script>
   </body>
 </html>

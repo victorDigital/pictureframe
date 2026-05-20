@@ -16,6 +16,7 @@ import { Brightness } from "../system/brightness.js";
 import { CdpManager } from "../cdp/manager.js";
 import { FamilyMessages } from "./familyMessage.js";
 import { RuleStore } from "../scheduler/rules.js";
+import { VncSupervisor } from "../system/vnc.js";
 import { paths } from "../util/paths.js";
 
 const log = sub("api");
@@ -30,6 +31,7 @@ export type ApiDeps = {
   cdp: CdpManager;
   family: FamilyMessages;
   rules: RuleStore;
+  vnc: VncSupervisor;
   version: string;
 };
 
@@ -251,7 +253,68 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
     return { ok: true };
   });
 
+  // ---- vnc ------------------------------------------------------------------
+
+  app.get("/api/vnc/status", async () => deps.vnc.status());
+  app.post("/api/vnc/start", async (_req, reply) => {
+    try {
+      return await deps.vnc.start();
+    } catch (err) {
+      reply.code(409);
+      return { error: String(err) };
+    }
+  });
+  app.post("/api/vnc/stop", async () => {
+    deps.vnc.stop();
+    return { ok: true };
+  });
+
   // ---- settings -------------------------------------------------------------
+
+  app.get("/api/settings/updater", async () => {
+    const u = deps.configStore.current.config.updater;
+    return {
+      channel: u.channel,
+      auto_apply: u.auto_apply,
+      staging_delay_hours: u.staging_delay_hours,
+      poll_interval_min: u.poll_interval_min,
+      retain_releases: u.retain_releases,
+      repo: u.repo,
+      signing_key_file: u.signing_key_file ?? null,
+    };
+  });
+
+  app.put<{
+    Body: {
+      channel?: "stable" | "beta";
+      auto_apply?: boolean;
+      staging_delay_hours?: number;
+    };
+  }>("/api/settings/updater", async (req, reply) => {
+    const cfgPath = deps.configStore.current.config;
+    if (!cfgPath.device.bearer_token_file) {
+      reply.code(409);
+      return { error: "safe_mode_cannot_edit_config" };
+    }
+    const { default: YAML } = await import("yaml");
+    const raw = await fs.readFile(paths.configFile, "utf8");
+    const doc = YAML.parseDocument(raw);
+    const u = doc.get("updater") as { set?: (k: string, v: unknown) => void } | undefined;
+    if (!u) {
+      reply.code(500);
+      return { error: "updater_section_missing" };
+    }
+    if (req.body.channel) (u as { set: (k: string, v: unknown) => void }).set("channel", req.body.channel);
+    if (typeof req.body.auto_apply === "boolean")
+      (u as { set: (k: string, v: unknown) => void }).set("auto_apply", req.body.auto_apply);
+    if (typeof req.body.staging_delay_hours === "number")
+      (u as { set: (k: string, v: unknown) => void }).set("staging_delay_hours", req.body.staging_delay_hours);
+    const tmp = paths.configFile + ".tmp";
+    await fs.writeFile(tmp, doc.toString());
+    await fs.rename(tmp, paths.configFile);
+    await deps.configStore.reload();
+    return { ok: true };
+  });
 
   app.post("/api/settings/rotate_bearer", async (_req, reply) => {
     const cfg = deps.configStore.current.config;

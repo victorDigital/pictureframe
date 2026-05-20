@@ -1,7 +1,15 @@
 {
   "id": "doorbell",
-  "name": "doorbell",
-  "description": "Auto-trigger on HA motion/doorbell event.",
-  "stub": true,
-  "config_schema": { "type": "object", "properties": {} }
+  "name": "Doorbell",
+  "description": "Auto-triggered on Home Assistant motion or doorbell events. Displays a snapshot or live MJPEG stream from the configured camera.",
+  "config_schema": {
+    "type": "object",
+    "required": ["snapshot_url"],
+    "properties": {
+      "snapshot_url": { "type": "string", "description": "Camera snapshot URL or MJPEG stream" },
+      "is_stream": { "type": "boolean", "default": false, "description": "Treat as a continuous stream rather than a still" },
+      "refresh_ms": { "type": "integer", "minimum": 200, "default": 1000 },
+      "label": { "type": "string", "default": "Doorbell" }
+    }
+  }
 }

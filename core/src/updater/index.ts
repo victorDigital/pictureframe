@@ -264,11 +264,26 @@ export class Updater {
     await exec("sudo", ["/usr/bin/systemctl", "restart", "frame-core"]).catch(() => {});
   }
 
-  async tailLog(lines: number, _subsystem?: string) {
+  async tailLog(lines: number, subsystem?: string) {
+    if (process.platform === "linux") {
+      try {
+        const args = ["-u", "frame-core", "-n", String(lines), "--no-pager", "--output=short"];
+        const { stdout } = await exec("journalctl", args);
+        let out = stdout.trimEnd().split("\n");
+        if (subsystem) {
+          out = out.filter((l) => l.includes(`"subsystem":"${subsystem}"`) || l.includes(subsystem));
+        }
+        return { lines: out };
+      } catch {
+        // fall through to update.log
+      }
+    }
     const file = path.join(paths.stateDir, "update.log");
     try {
       const data = await fs.readFile(file, "utf8");
-      return { lines: data.trimEnd().split("\n").slice(-lines) };
+      const all = data.trimEnd().split("\n").slice(-lines);
+      if (subsystem) return { lines: all.filter((l) => l.includes(subsystem)) };
+      return { lines: all };
     } catch {
       return { lines: [] as string[] };
     }

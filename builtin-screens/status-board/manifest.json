@@ -1,7 +1,27 @@
 {
   "id": "status-board",
-  "name": "status-board",
-  "description": "Grid of HA sensor tiles.",
-  "stub": true,
-  "config_schema": { "type": "object", "properties": {} }
+  "name": "Status board",
+  "description": "Grid of Home Assistant sensor tiles. Pulls state via HA's REST API directly.",
+  "config_schema": {
+    "type": "object",
+    "required": ["ha_base_url", "ha_token", "entities"],
+    "properties": {
+      "ha_base_url": { "type": "string", "description": "e.g. http://homeassistant.local:8123" },
+      "ha_token": { "type": "string", "description": "Long-lived access token" },
+      "entities": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["id"],
+          "properties": {
+            "id": { "type": "string", "description": "HA entity_id, e.g. sensor.living_room_temp" },
+            "label": { "type": "string" },
+            "unit": { "type": "string" },
+            "icon": { "type": "string", "description": "Emoji or short text shown as glyph" }
+          }
+        }
+      },
+      "columns": { "type": "integer", "minimum": 1, "maximum": 6, "default": 3 }
+    }
+  }
 }

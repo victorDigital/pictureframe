@@ -1,7 +1,12 @@
 {
   "id": "ambient",
-  "name": "ambient",
-  "description": "Slow generative visuals for late evening.",
-  "stub": true,
-  "config_schema": { "type": "object", "properties": {} }
+  "name": "Ambient",
+  "description": "Slow generative visuals for late evening — pure CSS/Canvas, no network. Three palettes selectable.",
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "palette": { "type": "string", "enum": ["midnight", "embers", "aurora"], "default": "midnight" },
+      "show_clock": { "type": "boolean", "default": true }
+    }
+  }
 }

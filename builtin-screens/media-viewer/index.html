@@ -2,20 +2,81 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>media-viewer</title>
+    <title>Media viewer</title>
     <style>
-      html,body{margin:0;height:100%;background:#0a0a0a;color:#888;font-family:ui-sans-serif,system-ui,sans-serif;}
-      body{display:grid;place-items:center;}
-      .panel{text-align:center;}
-      h1{font-weight:300;font-size:clamp(2rem,4vw,3rem);margin:0;color:#ccc;}
-      p{opacity:0.6;margin-top:1rem;}
+      :root { color-scheme: dark; }
+      html, body { margin: 0; height: 100%; background: #000; color: #ccc; font-family: ui-sans-serif, system-ui, sans-serif; overflow: hidden; }
+      .stage { position: fixed; inset: 0; display: grid; place-items: center; }
+      .stage > * {
+        max-width: 100%; max-height: 100%;
+        width: 100%; height: 100%;
+        object-fit: var(--fit, contain);
+        transition: opacity 800ms ease;
+      }
+      .err { position: fixed; inset: 0; display: grid; place-items: center; color: #ff9b9b; font-size: 1.5rem; }
     </style>
   </head>
   <body>
-    <div class="panel">
-      <h1>media-viewer</h1>
-      <p>Stub. Implementation pending — see SPEC §7.</p>
-    </div>
-    <script>parent.postMessage({type:"builtin_ready",id:"media-viewer"},"*");</script>
+    <div class="stage" id="stage"></div>
+    <div class="err" id="err" style="display:none"></div>
+    <script>
+      const params = new URLSearchParams(location.search);
+      let config = {};
+      try { config = JSON.parse(params.get("config") || "{}"); } catch (e) {}
+      document.documentElement.style.setProperty("--fit", config.fit || "contain");
+      const interval = (config.interval_sec || 15) * 1000;
+      const stage = document.getElementById("stage");
+      const err = document.getElementById("err");
+
+      async function loadList() {
+        const r = await fetch(config.index_url);
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      }
+
+      function ext(url) { return url.split("?")[0].split(".").pop().toLowerCase(); }
+      const VIDEO = new Set(["mp4", "webm", "mov", "m4v"]);
+
+      function show(url) {
+        stage.innerHTML = "";
+        let el;
+        if (VIDEO.has(ext(url))) {
+          el = document.createElement("video");
+          el.autoplay = true;
+          el.muted = true;
+          el.playsInline = true;
+          el.loop = false;
+        } else {
+          el = document.createElement("img");
+        }
+        el.src = url;
+        el.style.opacity = "0";
+        stage.appendChild(el);
+        requestAnimationFrame(() => { el.style.opacity = "1"; });
+      }
+
+      async function run() {
+        let list;
+        try { list = await loadList(); }
+        catch (e) {
+          err.textContent = String(e);
+          err.style.display = "grid";
+          return;
+        }
+        if (!list.length) {
+          err.textContent = "No media in directory.";
+          err.style.display = "grid";
+          return;
+        }
+        let i = 0;
+        show(list[0]);
+        setInterval(() => {
+          i = (i + 1) % list.length;
+          show(list[i]);
+        }, interval);
+      }
+      run();
+      parent.postMessage({ type: "builtin_ready", id: "media-viewer" }, "*");
+    </script>
   </body>
 </html>

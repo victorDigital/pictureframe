@@ -70,8 +70,7 @@ async function main() {
 
   const brightness = new Brightness(store.current.config);
   const updater = new Updater(store, version);
-  const vnc = new VncSupervisor();
-  void vnc;
+  const vnc = new VncSupervisor(store.current.config.vnc?.password_file);
 
   const ha = new HaBridge(store.current.config, scheduler, updater, brightness);
 
@@ -85,6 +84,7 @@ async function main() {
     cdp,
     family,
     rules,
+    vnc,
     version,
   });
 
@@ -115,6 +115,7 @@ async function main() {
     ha.stop();
     updater.stop();
     cronEngine.stop();
+    vnc.stop();
     await cdp.stop().catch(() => {});
     process.exit(0);
   };

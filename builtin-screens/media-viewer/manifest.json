@@ -1,7 +1,14 @@
 {
   "id": "media-viewer",
-  "name": "media-viewer",
-  "description": "Local image/video viewer pointing at a directory.",
-  "stub": true,
-  "config_schema": { "type": "object", "properties": {} }
+  "name": "Media viewer",
+  "description": "Cycles through images/videos served by a directory on the LAN. Expects an index URL returning a JSON array of asset URLs.",
+  "config_schema": {
+    "type": "object",
+    "required": ["index_url"],
+    "properties": {
+      "index_url": { "type": "string" },
+      "interval_sec": { "type": "integer", "minimum": 3, "default": 15 },
+      "fit": { "type": "string", "enum": ["cover", "contain"], "default": "contain" }
+    }
+  }
 }
