@@ -142,6 +142,14 @@ export class Scheduler extends EventEmitter {
     this.active = next;
     if (changed) {
       this.emit("activate", screen, next);
+      // SPEC §4.7: one-shot claims pop after they've been honored once. We
+      // remove the claim immediately after activation but leave `this.active`
+      // pointing at it for one tick so consumers see the right value. The
+      // next recompute (on the next claim arrival or expiry) will fall back
+      // to whatever's underneath.
+      if (next.oneShot && next.source !== "default") {
+        this.claims.delete(next.claimId);
+      }
     }
 
     this.scheduleExpiryRecheck();

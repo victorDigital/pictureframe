@@ -30,6 +30,7 @@ type Screen = {
   preload: boolean;
   transitionMs?: number;
   reloadIntervalSec?: number;
+  tags?: string[];
   config?: Record<string, unknown>;
 };
 
@@ -47,6 +48,7 @@ export function ScreensSection() {
   const [screens, setScreens] = useState<Screen[]>([]);
   const [editing, setEditing] = useState<Screen | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [tagFilter, setTagFilter] = useState<string>("");
   const [testResult, setTestResult] = useState<{ id: string; result: TestResult } | null>(null);
 
   async function refresh() {
@@ -104,18 +106,62 @@ export function ScreensSection() {
     return <ScreenEditor screen={editing} onCancel={() => setEditing(null)} onSave={save} />;
   }
 
+  const allTags = Array.from(new Set(screens.flatMap((s) => s.tags ?? []))).sort();
+  const visible = tagFilter
+    ? screens.filter((s) => (s.tags ?? []).includes(tagFilter))
+    : screens;
+
   return (
     <>
       <div className="tile">
         <h2>Screens</h2>
-        {screens.map((s) => (
+        {allTags.length > 0 && (
+          <div className="row" style={{ marginBottom: "0.5rem", flexWrap: "wrap" }}>
+            <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>Filter:</span>
+            <button
+              className={tagFilter === "" ? "primary" : "secondary"}
+              onClick={() => setTagFilter("")}
+              style={{ padding: "0.2rem 0.6rem", fontSize: "0.8rem" }}
+            >
+              all
+            </button>
+            {allTags.map((t) => (
+              <button
+                key={t}
+                className={tagFilter === t ? "primary" : "secondary"}
+                onClick={() => setTagFilter(t)}
+                style={{ padding: "0.2rem 0.6rem", fontSize: "0.8rem" }}
+              >
+                #{t}
+              </button>
+            ))}
+          </div>
+        )}
+        {visible.map((s) => (
           <div
             key={s.id}
             className="row"
             style={{ borderTop: "1px solid var(--border)", padding: "0.5rem 0" }}
           >
             <div>
-              <div>{s.name}</div>
+              <div>
+                {s.name}
+                {(s.tags ?? []).map((t) => (
+                  <span
+                    key={t}
+                    style={{
+                      marginLeft: "0.4rem",
+                      fontSize: "0.7rem",
+                      background: "rgba(79,140,255,0.18)",
+                      color: "var(--accent)",
+                      padding: "0.05rem 0.4rem",
+                      borderRadius: "0.3rem",
+                    }}
+                  >
+                    #{t}
+                  </span>
+                ))}
+              </div>
               <div style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
                 {s.type} · {s.source} {s.preload && "· preload"}
               </div>

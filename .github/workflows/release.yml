@@ -5,20 +5,140 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
   release:
     runs-on: ubuntu-24.04
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
-      - run: npm run build --workspaces --if-present
-      - name: Create GitHub release
+          cache: npm
+
+      - name: Detect channel
+        id: channel
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == *-beta.* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck --workspaces --if-present
+
+      - name: Test
+        run: npm run test --workspaces --if-present
+
+      - name: Build
+        run: npm run build --workspaces --if-present
+
+      # The updater downloads api.github.com/repos/<repo>/tarball/<tag> by
+      # default — that's GitHub's auto-generated source tarball with no
+      # built artifacts. We also publish a *built* tarball as an asset so
+      # devices can skip the npm ci + build step. The updater prefers
+      # release assets over the source tarball when both exist.
+      - name: Pack built tarball
+        id: pack
+        run: |
+          set -euo pipefail
+          stage="$(mktemp -d)"
+          out="$stage/frame-${GITHUB_REF_NAME}.tar.gz"
+          # Bundle source + built dist/ trees. Excludes node_modules so we
+          # stay small; the device runs `npm ci --omit=dev` in the staging
+          # area as part of the apply flow (SPEC §5.2 step 5).
+          tar --owner=0 --group=0 -czf "$out" \
+            --exclude='node_modules' \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='*.log' \
+            --transform "s|^|picture-frame-${GITHUB_REF_NAME}/|" \
+            core kiosk web builtin-screens migrations deploy \
+            package.json package-lock.json tsconfig.base.json \
+            SPEC.md README.md CHANGELOG.md LICENSE \
+            config.example.yaml screens.example.yaml
+          (cd "$stage" && sha256sum "frame-${GITHUB_REF_NAME}.tar.gz" \
+            > "frame-${GITHUB_REF_NAME}.tar.gz.sha256")
+          echo "stage=$stage" >> "$GITHUB_OUTPUT"
+          echo "tarball=$out" >> "$GITHUB_OUTPUT"
+
+      - name: Generate SHA256SUMS for all assets
+        run: |
+          set -euo pipefail
+          cd "${{ steps.pack.outputs.stage }}"
+          sha256sum -- *.tar.gz > SHA256SUMS
+
+      - name: Import release signing key
+        id: gpg
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.RELEASE_GPG_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${GPG_PRIVATE_KEY:-}" ]]; then
+            echo "No RELEASE_GPG_PRIVATE_KEY secret configured; skipping signing."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          gpg --list-secret-keys
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Sign tarball (detached, ASCII armored)
+        if: steps.gpg.outputs.signed == 'true'
+        env:
+          GPG_PASSPHRASE: ${{ secrets.RELEASE_GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          cd "${{ steps.pack.outputs.stage }}"
+          for f in *.tar.gz SHA256SUMS; do
+            gpg --batch --yes --pinentry-mode loopback \
+              --passphrase "${GPG_PASSPHRASE:-}" \
+              --armor --detach-sign --output "${f}.asc" "$f"
+          done
+          # The updater specifically looks for an asset named "release.asc"
+          # — point that at the tarball signature.
+          cp "frame-${GITHUB_REF_NAME}.tar.gz.asc" release.asc
+
+      - name: Compose release notes
+        run: |
+          set -euo pipefail
+          {
+            echo "## Picture Frame ${GITHUB_REF_NAME}"
+            echo
+            echo "### Channel"
+            if [[ "${{ steps.channel.outputs.prerelease }}" == "true" ]]; then
+              echo "Beta — picked up by devices on \`channel: beta\`."
+            else
+              echo "Stable — picked up by devices on \`channel: stable\` (default)."
+            fi
+            echo
+            echo "### Assets"
+            echo "- \`frame-${GITHUB_REF_NAME}.tar.gz\` — bundled source + built workspace dists"
+            echo "- \`SHA256SUMS\` — checksums for all uploaded tarballs"
+            if [[ -f "${{ steps.pack.outputs.stage }}/release.asc" ]]; then
+              echo "- \`release.asc\` — detached GPG signature of the tarball, verified by the on-device updater when \`updater.signing_key_file\` is configured (SPEC §5.7)"
+            fi
+            echo
+            echo "### Notes"
+            echo "See [CHANGELOG.md](./CHANGELOG.md) for the full list of changes."
+          } > release-body.md
+
+      - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
-          prerelease: ${{ contains(github.ref_name, '-beta.') }}
+          body_path: release-body.md
+          prerelease: ${{ steps.channel.outputs.prerelease == 'true' }}
+          files: |
+            ${{ steps.pack.outputs.stage }}/frame-*.tar.gz
+            ${{ steps.pack.outputs.stage }}/frame-*.tar.gz.sha256
+            ${{ steps.pack.outputs.stage }}/SHA256SUMS
+            ${{ steps.pack.outputs.stage }}/*.asc
+          fail_on_unmatched_files: false

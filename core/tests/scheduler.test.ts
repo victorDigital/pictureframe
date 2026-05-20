@@ -73,3 +73,21 @@ test("show throws for an unknown screen", () => {
   s.start();
   assert.throws(() => s.show("nope", "ha"));
 });
+
+test("oneShot claims are removed after activation, falling back to default", () => {
+  const s = newScheduler();
+  const ids: string[] = [];
+  s.on("activate", (screen) => ids.push(screen.id));
+  s.start();
+  // Higher-priority oneShot claim wins exactly once.
+  s.show("weather", "ha", { oneShot: true });
+  assert.equal(ids[ids.length - 1], "weather");
+  // It should have been removed from the claim set.
+  assert.equal(
+    s.list().some((c) => c.screenId === "weather" && c.source === "ha"),
+    false,
+  );
+  // A subsequent low-priority claim arrives and replaces the active screen.
+  s.show("grafana", "scheduled");
+  assert.equal(ids[ids.length - 1], "grafana");
+});

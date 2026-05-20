@@ -365,6 +365,74 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
     return { ok: true };
   });
 
+  app.get("/api/settings/signing_key", async () => {
+    const u = deps.configStore.current.config.updater;
+    if (!u.signing_key_file) return { configured: false, fingerprint: null };
+    try {
+      const data = await fs.readFile(u.signing_key_file, "utf8");
+      const fp = await gpgFingerprint(data).catch(() => null);
+      return { configured: true, path: u.signing_key_file, fingerprint: fp };
+    } catch {
+      return { configured: false, fingerprint: null };
+    }
+  });
+
+  app.post<{
+    Body: { key: string; signature?: string; override?: string };
+  }>("/api/settings/signing_key", async (req, reply) => {
+    if (!req.body?.key || !req.body.key.includes("BEGIN PGP PUBLIC KEY BLOCK")) {
+      reply.code(400);
+      return { error: "missing_public_key_block" };
+    }
+    const cfg = deps.configStore.current.config;
+    const targetPath =
+      cfg.updater.signing_key_file ?? "/etc/frame/secrets/release.pub";
+    const currentPath = cfg.updater.signing_key_file;
+
+    let currentExists = false;
+    if (currentPath) {
+      try {
+        await fs.access(currentPath);
+        currentExists = true;
+      } catch {
+        // not present — treat as bootstrap
+      }
+    }
+
+    if (!currentExists) {
+      // Bootstrap: any caller authorized by bearer token can install the
+      // first key (SPEC §5.7).
+    } else {
+      // Rotation. Two acceptable paths:
+      //   1. signature: the new key is signed by the old one (operator
+      //      uploaded a detached signature over the new key bytes)
+      //   2. override: operator typed the explicit consent string
+      const expectedConsent = "I understand this disables verification temporarily";
+      const consentOk = req.body.override === expectedConsent;
+      if (req.body.signature) {
+        try {
+          await verifyDetachedSignature(req.body.key, req.body.signature, currentPath!);
+        } catch (err) {
+          reply.code(400);
+          return { error: "signature_check_failed", details: String(err) };
+        }
+      } else if (!consentOk) {
+        reply.code(409);
+        return {
+          error: "rotation_requires_signature_or_override",
+          required_override_phrase: expectedConsent,
+        };
+      }
+    }
+
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    const tmp = targetPath + ".tmp";
+    await fs.writeFile(tmp, req.body.key, { mode: 0o640 });
+    await fs.rename(tmp, targetPath);
+    log.warn({ targetPath }, "release signing key updated");
+    return { ok: true, path: targetPath };
+  });
+
   app.post("/api/settings/rotate_bearer", async (_req, reply) => {
     const cfg = deps.configStore.current.config;
     const file = cfg.device.bearer_token_file;
@@ -413,6 +481,51 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
   });
 
   return app;
+}
+
+async function gpgFingerprint(armoredKey: string): Promise<string | null> {
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const exec = promisify(execFile);
+  const tmpDir = await fs.mkdtemp(path.join("/tmp", "fp-"));
+  try {
+    const keyFile = path.join(tmpDir, "key.asc");
+    await fs.writeFile(keyFile, armoredKey);
+    const { stdout } = await exec("gpg", [
+      "--homedir",
+      tmpDir,
+      "--with-colons",
+      "--import-options",
+      "show-only",
+      "--import",
+      keyFile,
+    ]);
+    const fpLine = stdout.split("\n").find((l) => l.startsWith("fpr:"));
+    return fpLine?.split(":")[9] ?? null;
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+}
+
+async function verifyDetachedSignature(
+  newKeyArmored: string,
+  signatureArmored: string,
+  currentKeyFile: string,
+): Promise<void> {
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const exec = promisify(execFile);
+  const tmpDir = await fs.mkdtemp(path.join("/tmp", "verify-"));
+  try {
+    const keyFile = path.join(tmpDir, "new.asc");
+    const sigFile = path.join(tmpDir, "sig.asc");
+    await fs.writeFile(keyFile, newKeyArmored);
+    await fs.writeFile(sigFile, signatureArmored);
+    // gpgv exits non-zero on verification failure — let it throw.
+    await exec("gpgv", ["--keyring", currentKeyFile, sigFile, keyFile]);
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
 }
 
 async function detectPublicIp(): Promise<boolean> {

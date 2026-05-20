@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 import { api, setToken } from "../api.js";
+
+const OVERRIDE_PHRASE = "I understand this disables verification temporarily";
 
 type UpdaterSettings = {
   channel: "stable" | "beta";
@@ -93,6 +96,8 @@ export function SettingsSection({ onSignOut }: { onSignOut: () => void }) {
         </div>
       </div>
 
+      <SigningKeyTile />
+
       <div className="tile">
         <h2>Updater</h2>
         {!settings ? (
@@ -149,3 +154,155 @@ export function SettingsSection({ onSignOut }: { onSignOut: () => void }) {
     </>
   );
 }
+
+type SigningKeyStatus = {
+  configured: boolean;
+  path?: string;
+  fingerprint: string | null;
+};
+
+function SigningKeyTile() {
+  const [status, setStatus] = useState<SigningKeyStatus | null>(null);
+  const [keyText, setKeyText] = useState("");
+  const [sigText, setSigText] = useState("");
+  const [override, setOverride] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function refresh() {
+    try {
+      setStatus(await api<SigningKeyStatus>("/api/settings/signing_key"));
+    } catch (e) {
+      setErr(String(e));
+    }
+  }
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  async function submit() {
+    setErr(null);
+    setOkMsg(null);
+    if (!keyText.includes("BEGIN PGP PUBLIC KEY BLOCK")) {
+      setErr("Paste an ASCII-armored PGP public key (BEGIN PGP PUBLIC KEY BLOCK).");
+      return;
+    }
+    if (status?.configured && !sigText && override !== OVERRIDE_PHRASE) {
+      setErr(
+        "Rotating an existing key requires either a detached signature from the old key, " +
+          "or the explicit override phrase typed in full.",
+      );
+      return;
+    }
+    setBusy(true);
+    try {
+      const body: Record<string, string> = { key: keyText };
+      if (sigText) body.signature = sigText;
+      if (override) body.override = override;
+      await api("/api/settings/signing_key", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      setOkMsg(status?.configured ? "Signing key rotated." : "Signing key installed.");
+      setKeyText("");
+      setSigText("");
+      setOverride("");
+      refresh();
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="tile">
+      <h2>Signing key</h2>
+      {err && <div className="banner">{err}</div>}
+      {okMsg && (
+        <div
+          className="banner"
+          style={{
+            background: "rgba(79, 140, 255, 0.12)",
+            borderColor: "var(--accent)",
+            color: "var(--accent)",
+          }}
+        >
+          {okMsg}
+        </div>
+      )}
+      {!status ? (
+        "Loading…"
+      ) : status.configured ? (
+        <p>
+          Configured at <code>{status.path}</code>
+          {status.fingerprint && (
+            <>
+              {" "}
+              · fingerprint <code>{status.fingerprint}</code>
+            </>
+          )}
+          . Releases without a matching <code>release.asc</code> asset will be refused.
+        </p>
+      ) : (
+        <p style={{ color: "var(--muted)" }}>
+          No signing key installed. The updater accepts unsigned tarballs until one is
+          configured here or at install time via <code>--signing-key</code>.
+        </p>
+      )}
+      <label style={{ marginTop: "1rem", display: "block" }}>
+        New public key (ASCII-armored)
+      </label>
+      <textarea
+        rows={6}
+        value={keyText}
+        onChange={(e) => setKeyText(e.target.value)}
+        placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----&#10;…&#10;-----END PGP PUBLIC KEY BLOCK-----"
+        style={textareaStyle}
+      />
+      {status?.configured && (
+        <>
+          <p style={{ color: "var(--muted)", marginTop: "1rem", fontSize: "0.85rem" }}>
+            Rotation: either paste a detached signature of the new key made with the old
+            key, or type the override phrase to disable verification for this rotation.
+          </p>
+          <label style={{ display: "block" }}>Detached signature (optional)</label>
+          <textarea
+            rows={5}
+            value={sigText}
+            onChange={(e) => setSigText(e.target.value)}
+            placeholder="-----BEGIN PGP SIGNATURE-----&#10;…&#10;-----END PGP SIGNATURE-----"
+            style={textareaStyle}
+          />
+          <label style={{ marginTop: "0.75rem", display: "block" }}>
+            Override (type the exact phrase to skip signature check)
+          </label>
+          <input
+            type="text"
+            value={override}
+            onChange={(e) => setOverride(e.target.value)}
+            placeholder={OVERRIDE_PHRASE}
+          />
+        </>
+      )}
+      <div className="row" style={{ marginTop: "1rem" }}>
+        <button className="primary" onClick={submit} disabled={busy || !keyText}>
+          {status?.configured ? "Rotate key" : "Install key"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const textareaStyle: CSSProperties = {
+  width: "100%",
+  background: "var(--bg)",
+  color: "var(--text)",
+  border: "1px solid var(--border)",
+  borderRadius: "0.4rem",
+  padding: "0.5rem",
+  fontFamily: "ui-monospace, monospace",
+  fontSize: "0.8rem",
+  boxSizing: "border-box",
+};

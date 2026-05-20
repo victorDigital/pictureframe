@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Picture Frame — Remote screen</title>
+    <style>
+      :root { color-scheme: dark; }
+      html, body { margin: 0; height: 100%; background: #000; color: #fff; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; overflow: hidden; }
+      #screen { width: 100%; height: 100%; }
+      #status {
+        position: fixed; top: 0; left: 0; right: 0;
+        background: rgba(0,0,0,0.8); padding: 0.5rem 1rem;
+        font-size: 0.85rem; display: flex; gap: 1rem; align-items: center;
+      }
+      #status .ok { color: #6cdb7c; }
+      #status .err { color: #ff9b9b; }
+      .panel { display: grid; place-items: center; height: 100%; }
+      .panel form { background: #111; border: 1px solid #2a2f3a; border-radius: 0.5rem; padding: 1.5rem; min-width: 20rem; }
+      .panel input, .panel button { display: block; width: 100%; padding: 0.5rem; margin-top: 0.5rem; background: #0a0a0a; color: #fff; border: 1px solid #2a2f3a; border-radius: 0.3rem; box-sizing: border-box; }
+      .panel button { background: #4f8cff; border: 0; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <div id="status">
+      <span id="status-text">Connecting…</span>
+      <span style="margin-left: auto; opacity: 0.6">Wayland kiosk view</span>
+    </div>
+    <div id="screen"></div>
+    <div id="prompt" class="panel" style="display:none">
+      <form id="prompt-form">
+        <label for="password">VNC password</label>
+        <input type="password" id="password" autofocus />
+        <button type="submit">Connect</button>
+      </form>
+    </div>
+
+    <script type="module">
+      import RFB from "@novnc/novnc";
+
+      const params = new URLSearchParams(location.search);
+      const host = params.get("host") ?? location.hostname;
+      const port = params.get("port") ?? "6080";
+      const path = params.get("path") ?? "";
+      const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
+      const url = `${wsProto}//${host}:${port}/${path}`;
+
+      const screenEl = document.getElementById("screen");
+      const statusEl = document.getElementById("status-text");
+      const promptEl = document.getElementById("prompt");
+      const passwordEl = document.getElementById("password");
+
+      function setStatus(text, cls) {
+        statusEl.textContent = text;
+        statusEl.className = cls ?? "";
+      }
+
+      let rfb;
+      function connect(password) {
+        try {
+          rfb = new RFB(screenEl, url, password ? { credentials: { password } } : {});
+          rfb.scaleViewport = true;
+          rfb.resizeSession = false;
+          rfb.background = "#000";
+          rfb.addEventListener("connect", () => setStatus("Connected", "ok"));
+          rfb.addEventListener("disconnect", (ev) => {
+            setStatus(ev.detail.clean ? "Disconnected" : "Connection lost", "err");
+          });
+          rfb.addEventListener("credentialsrequired", () => {
+            setStatus("Password required", "err");
+            promptEl.style.display = "grid";
+          });
+          rfb.addEventListener("securityfailure", (ev) => {
+            setStatus("Auth failed: " + (ev.detail?.reason ?? "unknown"), "err");
+            promptEl.style.display = "grid";
+            passwordEl.value = "";
+            passwordEl.focus();
+          });
+          setStatus("Connecting to " + url);
+        } catch (err) {
+          setStatus("Could not connect: " + err.message, "err");
+        }
+      }
+
+      document.getElementById("prompt-form").addEventListener("submit", (e) => {
+        e.preventDefault();
+        promptEl.style.display = "none";
+        if (rfb) {
+          rfb.sendCredentials({ password: passwordEl.value });
+        } else {
+          connect(passwordEl.value);
+        }
+      });
+
+      connect();
+    </script>
+  </body>
+</html>

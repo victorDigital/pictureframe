@@ -8,6 +8,7 @@ export type ReleaseInfo = {
   prerelease: boolean;
   tarballUrl: string;
   signatureAssetUrl?: string;
+  isBuiltAsset?: boolean;
 };
 
 export class GitHubClient {
@@ -34,13 +35,19 @@ export class GitHubClient {
       if (r.draft) continue;
       const isBeta = r.prerelease || /-beta\./.test(r.tag_name);
       if (channel === "stable" && isBeta) continue;
+      // Prefer a uploaded built tarball if present (named
+      // frame-<tag>.tar.gz) — its checksum and signature match what the
+      // release workflow signed in CI. Fall back to GitHub's
+      // auto-generated source tarball otherwise.
+      const builtAsset = r.assets.find((a) => /^frame-.*\.tar\.gz$/.test(a.name));
       const sigAsset = r.assets.find((a) => a.name === "release.asc");
       return {
         tag: r.tag_name,
         publishedAt: r.published_at,
         prerelease: isBeta,
-        tarballUrl: r.tarball_url,
+        tarballUrl: builtAsset?.browser_download_url ?? r.tarball_url,
         signatureAssetUrl: sigAsset?.browser_download_url,
+        isBuiltAsset: Boolean(builtAsset),
       };
     }
     return null;

@@ -1,11 +1,22 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { resolve } from "node:path";
 
 export default defineConfig({
   plugins: [react()],
   build: {
     outDir: "dist",
     emptyOutDir: true,
+    target: "esnext",
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, "index.html"),
+        vnc: resolve(__dirname, "vnc.html"),
+      },
+    },
+  },
+  optimizeDeps: {
+    esbuildOptions: { target: "esnext" },
   },
   server: {
     port: 5181,
