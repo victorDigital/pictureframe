@@ -18,6 +18,7 @@ import {
 } from "./snapshot.js";
 import { paths } from "../util/paths.js";
 import { sub } from "../util/logger.js";
+import { logUpdaterEvent } from "./log.js";
 
 const exec = promisify(execFile);
 const log = sub("updater");
@@ -87,8 +88,17 @@ export class Updater {
         this.status_.available = undefined;
         return;
       }
+      const isFirstSighting = !this.firstSeen.has(release.tag);
       const seenAt = this.firstSeen.get(release.tag) ?? new Date().toISOString();
       this.firstSeen.set(release.tag, seenAt);
+      if (isFirstSighting) {
+        void logUpdaterEvent({
+          level: "info",
+          msg: "new release discovered",
+          tag: release.tag,
+          details: { prerelease: release.prerelease, channel: cfg.channel },
+        });
+      }
       const appliedAfter = new Date(
         new Date(seenAt).getTime() + cfg.staging_delay_hours * 3_600_000,
       ).toISOString();
@@ -126,6 +136,7 @@ export class Updater {
     const tag = release.tag;
     const from = this.currentVersion;
     log.info({ tag, force: opts.force }, "applying release");
+    void logUpdaterEvent({ level: "info", msg: "applying release", tag, from });
 
     const staging = path.join(paths.releasesDir, `_staging-${tag}`);
     const finalDest = path.join(paths.releasesDir, tag);
@@ -190,6 +201,12 @@ export class Updater {
         await this.rollbackTo(from, snapshotDir);
         this.status_.lastResult = "rolled_back";
         this.status_.lastError = "health_check_failed";
+        await logUpdaterEvent({
+          level: "warn",
+          msg: "post-start health check failed; rolled back",
+          tag,
+          from,
+        });
         return { ok: false, rolled_back: true };
       }
 
@@ -199,11 +216,19 @@ export class Updater {
       this.status_.lastResult = "success";
       this.status_.lastError = undefined;
       await pruneSnapshots(paths.snapshotsDir, this.store.current.config.updater.retain_releases);
+      await logUpdaterEvent({ level: "info", msg: "release applied", tag, from });
       return { ok: true, tag };
     } catch (err) {
       log.error({ err }, "apply failed");
       this.status_.lastResult = "failed";
       this.status_.lastError = String(err);
+      await logUpdaterEvent({
+        level: "error",
+        msg: "apply failed",
+        tag,
+        from,
+        details: String(err),
+      });
       return { ok: false, error: String(err) };
     } finally {
       this.busy = false;
@@ -252,6 +277,7 @@ export class Updater {
 
   private async rollbackTo(fromTag: string, snapshotDir: string) {
     log.warn({ fromTag }, "rolling back");
+    void logUpdaterEvent({ level: "warn", msg: "rolling back", tag: fromTag });
     const dest = path.join(paths.releasesDir, fromTag);
     await fs.rm(paths.current + ".new", { force: true });
     await fs.symlink(dest, paths.current + ".new");
