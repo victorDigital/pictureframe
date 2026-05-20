@@ -65,7 +65,7 @@ export async function discoverMigrations(dir: string): Promise<DiscoveredMigrati
       (name.endsWith(".yaml") && /^requires_manual_step:\s*true/m.test(txt));
     out.push({
       number: Number(m[1]),
-      name: m[2],
+      name: m[2]!,
       filePath,
       ext: ("." + m[3]) as DiscoveredMigration["ext"],
       requiresManualStep,

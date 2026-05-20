@@ -1,0 +1,5 @@
+# Initial migration. No-op; serves to seed the migrations.json history
+# with a known baseline.
+requires_manual_step: false
+description: |
+  Baseline migration recorded at v0.0.1. Future migrations advance from here.

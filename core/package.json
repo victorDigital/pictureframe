@@ -12,7 +12,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test --import tsx/esm 'tests/**/*.test.ts'"
+    "test": "node --test --import tsx tests/*.test.ts"
   },
   "dependencies": {
     "ajv": "^8.17.1",

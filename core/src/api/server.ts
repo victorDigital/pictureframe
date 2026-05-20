@@ -160,9 +160,10 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
     socket.on("close", () => deps.shell.detach(sink));
   });
 
-  app.setErrorHandler((err, _req, reply) => {
-    const code = (err as Error & { statusCode?: number }).statusCode ?? 500;
-    reply.code(code).send({ error: err.message });
+  app.setErrorHandler((err: unknown, _req, reply) => {
+    const e = err as Error & { statusCode?: number };
+    const code = e?.statusCode ?? 500;
+    reply.code(code).send({ error: e?.message ?? "internal_error" });
   });
 
   return app;

@@ -244,7 +244,7 @@ export class Updater {
       .sort()
       .pop();
     if (!target) throw new Error("no_snapshot_available");
-    const [, fromTag] = target.m!;
+    const fromTag = target.m![1]!;
     await this.rollbackTo(fromTag, path.join(paths.snapshotsDir, target.n));
     this.status_.lastResult = "rolled_back";
     return { ok: true, restored: fromTag };

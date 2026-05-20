@@ -4,7 +4,7 @@
 
 const PROTOCOL_VERSION = 3;
 
-type Screen = {
+type ScreenInfo = {
   id: string;
   name: string;
   type: "url" | "builtin";
@@ -17,7 +17,7 @@ type Screen = {
 type CoreMsg =
   | { type: "welcome"; protocolVersion: number }
   | { type: "reload_required"; reason: string }
-  | { type: "preload_builtin"; screen: Screen }
+  | { type: "preload_builtin"; screen: ScreenInfo }
   | { type: "show_builtin"; id: string; transitionMs: number }
   | { type: "unload_builtin"; id: string }
   | { type: "show_overlay_image"; dataUrl: string; transitionMs: number }
@@ -47,12 +47,12 @@ function setTransitionMs(ms: number) {
   document.documentElement.style.setProperty("--transition-ms", `${ms}ms`);
 }
 
-function builtinUrl(screen: Screen): string {
+function builtinUrl(screen: ScreenInfo): string {
   const cfg = screen.config ? `?config=${encodeURIComponent(JSON.stringify(screen.config))}` : "";
   return `/builtin/${encodeURIComponent(screen.source)}/index.html${cfg}`;
 }
 
-function preloadBuiltin(screen: Screen) {
+function preloadBuiltin(screen: ScreenInfo) {
   if (iframes.has(screen.id)) return;
   const iframe = document.createElement("iframe");
   iframe.src = builtinUrl(screen);
