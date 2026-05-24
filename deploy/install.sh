@@ -138,6 +138,7 @@ BASE_PACKAGES=(
   jq
   ddcutil
   websockify
+  novnc
   avahi-daemon
   logrotate
   ca-certificates
