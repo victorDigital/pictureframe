@@ -36,6 +36,48 @@ warn() { printf '\033[1;33m[install]\033[0m %s\n' "$*" >&2; }
 die() { printf '\033[1;31m[install]\033[0m %s\n' "$*" >&2; exit 1; }
 
 ###############################################################################
+# 0. Bootstrap from tarball when invoked via `curl … | bash`
+###############################################################################
+# In that mode $0 is `bash` and the script has no sibling files (systemd/,
+# udev/, logrotate.d/, ../config.example.yaml). Fetch the repo tarball and
+# re-exec from the unpacked tree so later steps can find their assets.
+
+if [[ -n "${_FRAME_BOOTSTRAP_DIR:-}" ]]; then
+  trap 'rm -rf "${_FRAME_BOOTSTRAP_DIR}"' EXIT
+fi
+
+SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
+SCRIPT_DIR="$(cd "$(dirname -- "$SCRIPT_PATH")" 2>/dev/null && pwd)" || SCRIPT_DIR=""
+
+if [[ -z "$SCRIPT_DIR" \
+      || ! -d "$SCRIPT_DIR/systemd" \
+      || ! -f "$SCRIPT_DIR/../config.example.yaml" ]]; then
+  if ! command -v curl >/dev/null 2>&1 || ! command -v tar >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq
+    apt-get install -y -qq curl tar ca-certificates
+  fi
+
+  log "Fetching $REPO tarball to stage installer assets"
+  STAGE_DIR="$(mktemp -d -t frame-install.XXXXXX)"
+  if ! curl -fsSL "https://api.github.com/repos/$REPO/tarball/main" \
+        | tar -xz --strip-components=1 -C "$STAGE_DIR"; then
+    rm -rf "$STAGE_DIR"
+    die "Failed to fetch installer assets from $REPO."
+  fi
+  if [[ ! -x "$STAGE_DIR/deploy/install.sh" ]]; then
+    chmod +x "$STAGE_DIR/deploy/install.sh" 2>/dev/null || true
+  fi
+
+  BOOTSTRAP_ARGS=( --repo "$REPO" )
+  [[ -n "$SIGNING_KEY" ]] && BOOTSTRAP_ARGS+=( --signing-key "$SIGNING_KEY" )
+  [[ "$NONINTERACTIVE" -eq 1 ]] && BOOTSTRAP_ARGS+=( --non-interactive )
+
+  exec env _FRAME_BOOTSTRAP_DIR="$STAGE_DIR" \
+       bash "$STAGE_DIR/deploy/install.sh" "${BOOTSTRAP_ARGS[@]}"
+fi
+
+###############################################################################
 # 1. Detect distribution
 ###############################################################################
 
