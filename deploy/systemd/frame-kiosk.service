@@ -1,7 +1,8 @@
 [Unit]
 Description=Picture Frame kiosk (Cage + Chromium driven by frame-core)
-After=frame-core.service systemd-user-sessions.service
+After=frame-core.service systemd-user-sessions.service getty@tty1.service
 Requires=frame-core.service
+Conflicts=getty@tty1.service
 Wants=graphical.target
 
 [Service]

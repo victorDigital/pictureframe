@@ -261,16 +261,15 @@ if [[ -d "$SYSTEMD_SRC" ]]; then
   install -m 0644 "$SYSTEMD_SRC"/*.service /etc/systemd/system/
   install -m 0644 "$SYSTEMD_SRC"/*.timer   /etc/systemd/system/ 2>/dev/null || true
 
-  # Autologin via getty drop-in.
-  install -d -m 0755 /etc/systemd/system/getty@tty1.service.d
-  cat > /etc/systemd/system/getty@tty1.service.d/override.conf <<'EOF'
-[Service]
-ExecStart=
-ExecStart=-/sbin/agetty --autologin frame --noclear %I $TERM
-EOF
+  # Clean up legacy autologin override from earlier installs — frame-kiosk
+  # claims tty1 directly via PAMName=login + Conflicts=getty@tty1.service.
+  if [[ -f /etc/systemd/system/getty@tty1.service.d/override.conf ]]; then
+    log "Removing legacy getty@tty1 autologin override"
+    rm -f /etc/systemd/system/getty@tty1.service.d/override.conf
+    rmdir /etc/systemd/system/getty@tty1.service.d 2>/dev/null || true
+  fi
 
   systemctl daemon-reload
-  systemctl enable getty@tty1.service
   systemctl enable frame-core.service
   systemctl enable frame-kiosk.service
   systemctl enable frame-chromium-restart.timer 2>/dev/null || true
@@ -489,10 +488,15 @@ if [[ "$DESKTOP_DISABLED" -eq 1 ]]; then
 elif [[ "$DESKTOP_PRESENT" -eq 1 ]]; then
   warn "Desktop still active. frame-kiosk will not start until it's disabled."
 elif [[ "$KIOSK_STATE" != "active" ]]; then
-  warn "frame-kiosk is not active. Common causes:"
-  warn "  - Running in a VM without GPU/DRM passthrough (cage needs KMS)"
-  warn "  - tty1 in use by a desktop environment"
-  warn "  Check: journalctl -u frame-kiosk -n 100 --no-pager"
+  warn "frame-kiosk is not active. Recent journal entries:"
+  journalctl -u frame-kiosk -n 25 --no-pager --output=cat 2>/dev/null \
+    | sed 's/^/    /' >&2 || true
+  if ! compgen -G '/dev/dri/card*' >/dev/null; then
+    warn "No /dev/dri/card* device — cage cannot initialize a display."
+    warn "  This VM/host has no KMS-capable GPU. On QEMU, boot with -device virtio-gpu-gl"
+    warn "  (or virtio-gpu-pci) and a guest kernel that loads the virtio_gpu module."
+  fi
+  warn "  Full log: journalctl -u frame-kiosk -n 200 --no-pager"
 fi
 
 log "Done."
