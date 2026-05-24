@@ -138,6 +138,24 @@ test("PUT /api/screens rejects invalid bodies", async () => {
   await app.close();
 });
 
+test("PUT /api/screens returns friendly message when default_screen would be removed", async () => {
+  const deps = await makeDeps();
+  const app = await createServer({ ...deps, version: "v0.0.0-test" });
+  const r = await app.inject({
+    method: "PUT",
+    url: "/api/screens",
+    headers: { authorization: "Bearer " + "x".repeat(24), "content-type": "application/json" },
+    payload: JSON.stringify({
+      screens: [{ id: "photos", name: "Photos", type: "builtin", source: "photos", preload: false }],
+    }),
+  });
+  assert.equal(r.statusCode, 400);
+  const body = JSON.parse(r.body);
+  assert.equal(body.error, "default_screen_missing");
+  assert.match(body.message, /default_screen/);
+  await app.close();
+});
+
 test("POST /family-message returns 403 when disabled in config", async () => {
   const deps = await makeDeps();
   const app = await createServer({ ...deps, version: "v0.0.0-test" });

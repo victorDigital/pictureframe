@@ -26,7 +26,14 @@ export async function api<T = unknown>(
   }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status}: ${body}`);
+    let friendly: string | null = null;
+    try {
+      const parsed = JSON.parse(body) as { message?: string; error?: string };
+      friendly = parsed.message ?? parsed.error ?? null;
+    } catch {
+      // body wasn't JSON
+    }
+    throw new Error(friendly ?? `HTTP ${res.status}: ${body}`);
   }
   return res.json() as Promise<T>;
 }
