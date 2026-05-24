@@ -18,11 +18,16 @@ Restart=on-failure
 RestartSec=3
 LimitNOFILE=8192
 
+# Create /run/frame on each start (tmpfs clears it on reboot); systemd makes
+# this before the namespace is set up, so it's safe to reference below.
+RuntimeDirectory=frame
+RuntimeDirectoryMode=0755
+
 # Hardening (the Wayland session lives in frame-kiosk; core only needs files + net)
 NoNewPrivileges=true
 ProtectSystem=full
 ProtectHome=read-only
-ReadWritePaths=/opt/frame /etc/frame /run/frame /var/log
+ReadWritePaths=/opt/frame /etc/frame /var/log
 PrivateTmp=true
 
 [Install]
