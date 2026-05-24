@@ -44,8 +44,22 @@ export class ChromiumProcess extends EventEmitter {
     });
     this.child = child;
 
+    // Every stdio stream needs an 'error' listener; without one, Node
+    // throws an unhandled 'error' event when chromium dies (ECONNRESET on
+    // the underlying pipe). That includes the CDP fds 3/4 even though
+    // PipeTransport will also attach listeners later — the child may die
+    // before PipeTransport is constructed.
+    child.on("error", (err) => log.warn({ err }, "chromium spawn error"));
     child.stdout?.on("data", (b) => log.debug({ chunk: b.toString() }, "chromium stdout"));
+    child.stdout?.on("error", (err) => log.warn({ err }, "chromium stdout error"));
     child.stderr?.on("data", (b) => log.debug({ chunk: b.toString() }, "chromium stderr"));
+    child.stderr?.on("error", (err) => log.warn({ err }, "chromium stderr error"));
+    for (const fd of [3, 4] as const) {
+      const s = child.stdio[fd] as NodeJS.ReadableStream | NodeJS.WritableStream | null;
+      (s as NodeJS.EventEmitter | null)?.on?.("error", (err) =>
+        log.warn({ err, fd }, "chromium cdp pipe error"),
+      );
+    }
     child.on("exit", (code, sig) => {
       this.exited = true;
       log.warn({ code, sig }, "chromium exited");

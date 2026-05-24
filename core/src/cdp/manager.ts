@@ -39,6 +39,7 @@ export class CdpManager extends EventEmitter {
     const { writeFd, readFd } = this.chromium.start();
     this.transport = new PipeTransport(writeFd, readFd);
     this.transport.on("event", (m) => this.onEvent(m as never));
+    this.transport.on("error", (err) => log.warn({ err }, "cdp transport error"));
     this.chromium.on("exit", () => this.emit("chromium_exit"));
 
     await this.transport.send("Target.setDiscoverTargets", { discover: true });

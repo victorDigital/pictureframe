@@ -19,6 +19,7 @@ export class PipeTransport extends EventEmitter {
     this.readable.on("data", (chunk: Buffer) => this.onData(chunk));
     this.readable.on("end", () => this.emit("close"));
     this.readable.on("error", (err) => this.emit("error", err));
+    this.writable.on("error", (err) => this.emit("error", err));
   }
 
   private onData(chunk: Buffer) {

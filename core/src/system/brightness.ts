@@ -16,14 +16,22 @@ export class Brightness {
     if (backend === "backlight") {
       const dev = this.cfg.display.backlight_device;
       if (!dev) return this.cfg.display.default_brightness;
-      const [raw, maxRaw] = await Promise.all([
-        fs.readFile(path.join(dev, "brightness"), "utf8"),
-        fs.readFile(path.join(dev, "max_brightness"), "utf8"),
-      ]);
-      const value = parseInt(raw.trim(), 10);
-      const max = parseInt(maxRaw.trim(), 10);
-      if (!max) return 0;
-      return Math.round((value / max) * 100);
+      try {
+        const [raw, maxRaw] = await Promise.all([
+          fs.readFile(path.join(dev, "brightness"), "utf8"),
+          fs.readFile(path.join(dev, "max_brightness"), "utf8"),
+        ]);
+        const value = parseInt(raw.trim(), 10);
+        const max = parseInt(maxRaw.trim(), 10);
+        if (!max) return 0;
+        return Math.round((value / max) * 100);
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+          log.warn({ dev }, "backlight device missing; returning default brightness");
+          return this.cfg.display.default_brightness;
+        }
+        throw err;
+      }
     }
     if (backend === "ddcutil") {
       const { stdout } = await exec("ddcutil", ["getvcp", "10", "--terse"]);
@@ -41,11 +49,19 @@ export class Brightness {
     if (backend === "backlight") {
       const dev = this.cfg.display.backlight_device;
       if (!dev) return;
-      const maxRaw = await fs.readFile(path.join(dev, "max_brightness"), "utf8");
-      const max = parseInt(maxRaw.trim(), 10);
-      const target = Math.round((clamped / 100) * max);
-      await fs.writeFile(path.join(dev, "brightness"), String(target));
-      log.info({ percent: clamped, raw: target }, "brightness set");
+      try {
+        const maxRaw = await fs.readFile(path.join(dev, "max_brightness"), "utf8");
+        const max = parseInt(maxRaw.trim(), 10);
+        const target = Math.round((clamped / 100) * max);
+        await fs.writeFile(path.join(dev, "brightness"), String(target));
+        log.info({ percent: clamped, raw: target }, "brightness set");
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+          log.warn({ dev }, "backlight device missing; skipping brightness write");
+          return;
+        }
+        throw err;
+      }
     } else if (backend === "ddcutil") {
       await exec("ddcutil", ["setvcp", "10", String(clamped)]);
     }
