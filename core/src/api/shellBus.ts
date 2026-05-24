@@ -17,6 +17,10 @@ export class ShellBus extends EventEmitter {
     this.sink = sink;
     this.send({ type: "welcome", protocolVersion: SHELL_PROTOCOL_VERSION });
     log.info("shell attached");
+    // Tell main() to replay the current screen — otherwise any
+    // show_builtin / activate that fired before the shell connected was
+    // dropped (see this.send() guard above), and the page sits blank.
+    this.emit("connect");
   }
 
   detach(sink: Sink) {

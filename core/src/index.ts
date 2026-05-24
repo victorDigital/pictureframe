@@ -84,13 +84,29 @@ async function main() {
 
   scheduler.on("activate", (screen, claim) => {
     log.info({ screen: screen.id, claim: claim.claimId }, "scheduler activate");
-    void screens.show(screen, screen.transitionMs ?? 600);
+    screens.show(screen, screen.transitionMs ?? 600).catch((err) =>
+      log.error({ err, screen: screen.id }, "screen show failed"),
+    );
     void pushState(screen.id);
   });
 
   store.on("reloaded", (state) => {
     scheduler.setScreens(state.screens);
     screens.registerScreens(state.screens);
+  });
+
+  // The shell page connects asynchronously after frame-core boots. Any
+  // show_builtin / preload_builtin sent before the WebSocket attached
+  // gets dropped by ShellBus (it has no sink yet). When the shell first
+  // attaches, replay whatever the scheduler picked as the active screen
+  // so the iframe activates.
+  shell.on("connect", () => {
+    const active = screens.currentScreen;
+    if (active) {
+      screens.show(active, 0).catch((err) =>
+        log.error({ err, screen: active.id }, "screen replay failed"),
+      );
+    }
   });
 
   const ha = new HaBridge(store.current.config, scheduler, updater, brightness);

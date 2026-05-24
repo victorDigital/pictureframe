@@ -1,6 +1,6 @@
 import { Screen } from "../config/schema.js";
 
-export const SHELL_PROTOCOL_VERSION = 3;
+export const SHELL_PROTOCOL_VERSION = 4;
 
 export type CoreToShell =
   | { type: "welcome"; protocolVersion: number }
@@ -8,6 +8,9 @@ export type CoreToShell =
   | { type: "preload_builtin"; screen: Screen }
   | { type: "show_builtin"; id: string; transitionMs: number }
   | { type: "unload_builtin"; id: string }
+  | { type: "preload_url"; screen: Screen }
+  | { type: "show_url"; id: string; transitionMs: number }
+  | { type: "unload_url"; id: string }
   | { type: "show_overlay_image"; dataUrl: string; transitionMs: number }
   | { type: "show_overlay_color"; color: string; transitionMs: number }
   | { type: "show_loading_hint"; label: string }

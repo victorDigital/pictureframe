@@ -13,6 +13,10 @@ export class ScreenController {
   private current?: Screen;
   private maxPreloaded: number;
 
+  get currentScreen(): Screen | undefined {
+    return this.current;
+  }
+
   constructor(
     private cdp: CdpManager,
     private shell: ShellBus,
@@ -67,6 +71,18 @@ export class ScreenController {
 
     if (target.type === "builtin") {
       this.shell.send({ type: "preload_builtin", screen: target });
+    }
+
+    // When CDP isn't connected (FRAME_DISABLE_CDP=1 or chromium failed to
+    // attach), URL screens render as iframes inside the shell instead of
+    // separate chromium tabs. Frame-busting sites will refuse to load
+    // this way — that's the SPEC §4.1 tradeoff.
+    if (target.type === "url" && !this.cdp.isConnected()) {
+      this.shell.send({ type: "preload_url", screen: target });
+      this.shell.send({ type: "show_url", id: target.id, transitionMs });
+      this.shell.send({ type: "hide_overlay", transitionMs });
+      this.current = target;
+      return;
     }
 
     const overlay = await this.captureOverlay(previous);

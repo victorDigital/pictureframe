@@ -2,7 +2,7 @@
 // transition overlay layer. Speaks the versioned WebSocket protocol
 // described in SPEC §4.4.
 
-const PROTOCOL_VERSION = 3;
+const PROTOCOL_VERSION = 4;
 
 type ScreenInfo = {
   id: string;
@@ -20,6 +20,9 @@ type CoreMsg =
   | { type: "preload_builtin"; screen: ScreenInfo }
   | { type: "show_builtin"; id: string; transitionMs: number }
   | { type: "unload_builtin"; id: string }
+  | { type: "preload_url"; screen: ScreenInfo }
+  | { type: "show_url"; id: string; transitionMs: number }
+  | { type: "unload_url"; id: string }
   | { type: "show_overlay_image"; dataUrl: string; transitionMs: number }
   | { type: "show_overlay_color"; color: string; transitionMs: number }
   | { type: "show_loading_hint"; label: string }
@@ -83,6 +86,28 @@ function unloadBuiltin(id: string) {
   }
 }
 
+function preloadUrl(screen: ScreenInfo) {
+  if (iframes.has(screen.id)) return;
+  const iframe = document.createElement("iframe");
+  iframe.src = screen.source;
+  iframe.dataset.id = screen.id;
+  iframe.dataset.active = "false";
+  // No sandbox here: URL screens are operator-configured and need to
+  // function as full web apps. Frame-busting sites still won't render
+  // in an iframe; those need the CDP-tab path (SPEC §4.1) which isn't
+  // wired in the current build.
+  builtinsRoot.appendChild(iframe);
+  iframes.set(screen.id, iframe);
+}
+
+function showUrl(id: string, transitionMs: number) {
+  showBuiltin(id, transitionMs);
+}
+
+function unloadUrl(id: string) {
+  unloadBuiltin(id);
+}
+
 function showOverlayImage(dataUrl: string, transitionMs: number) {
   overlayEl.style.background = `#000 center / cover no-repeat url("${dataUrl}")`;
   setTransitionMs(transitionMs);
@@ -114,7 +139,13 @@ function send(msg: Record<string, unknown>) {
 
 function connect() {
   const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-  ws = new WebSocket(`${protocol}//${location.host}/ws`);
+  // The /ws upgrade is auth-skipped when the source IP is loopback (the
+  // on-device kiosk chromium). When the shell is loaded from another
+  // host for debugging, pass ?token=... in the page URL and we forward it
+  // on the WS upgrade.
+  const pageToken = new URLSearchParams(location.search).get("token");
+  const tokenQs = pageToken ? `?token=${encodeURIComponent(pageToken)}` : "";
+  ws = new WebSocket(`${protocol}//${location.host}/ws${tokenQs}`);
   ws.onopen = () => {
     setStatus(null);
     send({ type: "hello", protocolVersion: PROTOCOL_VERSION });
@@ -157,6 +188,15 @@ function handle(msg: CoreMsg) {
       break;
     case "unload_builtin":
       unloadBuiltin(msg.id);
+      break;
+    case "preload_url":
+      preloadUrl(msg.screen);
+      break;
+    case "show_url":
+      showUrl(msg.id, msg.transitionMs);
+      break;
+    case "unload_url":
+      unloadUrl(msg.id);
       break;
     case "show_overlay_image":
       showOverlayImage(msg.dataUrl, msg.transitionMs);
