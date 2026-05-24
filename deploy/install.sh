@@ -16,12 +16,15 @@ set -euo pipefail
 REPO="victorDigital/pictureframe"
 SIGNING_KEY=""
 NONINTERACTIVE=0
+DISABLE_DESKTOP_FLAG=""   # "", "yes", or "no"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --signing-key) SIGNING_KEY="$2"; shift 2 ;;
     --repo)        REPO="$2"; shift 2 ;;
     --non-interactive) NONINTERACTIVE=1; shift ;;
+    --disable-desktop) DISABLE_DESKTOP_FLAG="yes"; shift ;;
+    --keep-desktop)    DISABLE_DESKTOP_FLAG="no"; shift ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -72,6 +75,8 @@ if [[ -z "$SCRIPT_DIR" \
   BOOTSTRAP_ARGS=( --repo "$REPO" )
   [[ -n "$SIGNING_KEY" ]] && BOOTSTRAP_ARGS+=( --signing-key "$SIGNING_KEY" )
   [[ "$NONINTERACTIVE" -eq 1 ]] && BOOTSTRAP_ARGS+=( --non-interactive )
+  [[ "$DISABLE_DESKTOP_FLAG" == "yes" ]] && BOOTSTRAP_ARGS+=( --disable-desktop )
+  [[ "$DISABLE_DESKTOP_FLAG" == "no" ]]  && BOOTSTRAP_ARGS+=( --keep-desktop )
 
   exec env _FRAME_BOOTSTRAP_DIR="$STAGE_DIR" \
        bash "$STAGE_DIR/deploy/install.sh" "${BOOTSTRAP_ARGS[@]}"
@@ -370,13 +375,78 @@ if [[ ! -e /opt/frame/current ]]; then
 fi
 
 ###############################################################################
+# 12b. Detect and (optionally) disable a conflicting desktop session
+###############################################################################
+# Ubuntu Desktop ships a display manager (gdm3) on tty1 and boots into
+# graphical.target. frame-kiosk wants exclusive use of tty1 and won't start
+# until the DM is gone and the default target is multi-user.
+
+DETECTED_DM=""
+for dm in gdm3 gdm lightdm sddm kdm xdm lxdm slim; do
+  if systemctl cat "${dm}.service" >/dev/null 2>&1; then
+    if systemctl is-enabled --quiet "${dm}.service" 2>/dev/null \
+       || systemctl is-active  --quiet "${dm}.service" 2>/dev/null; then
+      DETECTED_DM="$dm"
+      break
+    fi
+  fi
+done
+
+DEFAULT_TARGET="$(systemctl get-default 2>/dev/null || true)"
+DESKTOP_PRESENT=0
+[[ -n "$DETECTED_DM" ]] && DESKTOP_PRESENT=1
+[[ "$DEFAULT_TARGET" == "graphical.target" ]] && DESKTOP_PRESENT=1
+
+DESKTOP_DISABLED=0
+
+if [[ "$DESKTOP_PRESENT" -eq 1 ]]; then
+  warn "Conflicting desktop environment detected:"
+  [[ -n "$DETECTED_DM" ]] && warn "  - display manager '$DETECTED_DM' is enabled/active (holds tty1)"
+  [[ "$DEFAULT_TARGET" == "graphical.target" ]] && warn "  - systemd default target is $DEFAULT_TARGET"
+  warn "frame-kiosk needs exclusive tty1; it won't start until the desktop is disabled."
+
+  CHOICE="$DISABLE_DESKTOP_FLAG"
+  if [[ -z "$CHOICE" && "$NONINTERACTIVE" -eq 0 ]]; then
+    read -r -p "Disable the desktop session now (takes effect after reboot)? [y/N] " ans </dev/tty || ans=""
+    [[ "$ans" =~ ^[Yy] ]] && CHOICE="yes" || CHOICE="no"
+  fi
+
+  case "$CHOICE" in
+    yes)
+      if [[ -n "$DETECTED_DM" ]]; then
+        log "Disabling $DETECTED_DM (will not stop it now — reboot to apply)"
+        systemctl disable "${DETECTED_DM}.service" >/dev/null 2>&1 || \
+          warn "  could not disable ${DETECTED_DM}.service"
+      fi
+      log "Setting default systemd target to multi-user.target"
+      systemctl set-default multi-user.target >/dev/null 2>&1 || \
+        warn "  could not change default target"
+      DESKTOP_DISABLED=1
+      ;;
+    *)
+      warn "Leaving the desktop in place. To disable it manually later:"
+      [[ -n "$DETECTED_DM" ]] && warn "  sudo systemctl disable --now ${DETECTED_DM}.service"
+      warn "  sudo systemctl set-default multi-user.target"
+      warn "  sudo reboot"
+      ;;
+  esac
+fi
+
+###############################################################################
 # 13. Start services
 ###############################################################################
 
 if systemctl list-unit-files | grep -q frame-core.service; then
-  log "Starting frame-core and frame-kiosk"
+  log "Starting frame-core"
   systemctl restart frame-core.service || warn "frame-core failed to start; check 'journalctl -u frame-core'"
-  systemctl restart frame-kiosk.service || warn "frame-kiosk failed to start; check 'journalctl -u frame-kiosk'"
+  if [[ "$DESKTOP_PRESENT" -eq 1 && "$DESKTOP_DISABLED" -eq 0 ]]; then
+    warn "Skipping frame-kiosk start — desktop still owns tty1. Reboot after disabling to switch in."
+  elif [[ "$DESKTOP_DISABLED" -eq 1 ]]; then
+    warn "Skipping frame-kiosk start — reboot to switch from the desktop to the kiosk."
+  else
+    log "Starting frame-kiosk"
+    systemctl restart frame-kiosk.service || warn "frame-kiosk failed to start; check 'journalctl -u frame-kiosk'"
+  fi
 fi
 
 ###############################################################################
@@ -414,7 +484,11 @@ if [[ -n "$HOST_SHORT" ]] && systemctl is-active --quiet avahi-daemon 2>/dev/nul
   fi
 fi
 
-if [[ "$KIOSK_STATE" != "active" ]]; then
+if [[ "$DESKTOP_DISABLED" -eq 1 ]]; then
+  warn "Desktop disabled. Reboot to switch into the kiosk:  sudo reboot"
+elif [[ "$DESKTOP_PRESENT" -eq 1 ]]; then
+  warn "Desktop still active. frame-kiosk will not start until it's disabled."
+elif [[ "$KIOSK_STATE" != "active" ]]; then
   warn "frame-kiosk is not active. Common causes:"
   warn "  - Running in a VM without GPU/DRM passthrough (cage needs KMS)"
   warn "  - tty1 in use by a desktop environment"
