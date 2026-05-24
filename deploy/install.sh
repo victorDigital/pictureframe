@@ -357,9 +357,12 @@ if [[ ! -e /opt/frame/current ]]; then
     tar -xzf "$TARBALL" --strip-components=1 -C "$BOOTSTRAP_DIR"
     rm -f "$TARBALL"
     chown -R frame:frame "$BOOTSTRAP_DIR"
-    su -s /bin/bash -c "cd '$BOOTSTRAP_DIR' && npm ci --omit=dev || npm install --omit=dev" frame
-    su -s /bin/bash -c "cd '$BOOTSTRAP_DIR' && npm run build" frame || \
+    su -s /bin/bash -c "cd '$BOOTSTRAP_DIR' && npm ci || npm install" frame
+    if su -s /bin/bash -c "cd '$BOOTSTRAP_DIR' && npm run build" frame; then
+      su -s /bin/bash -c "cd '$BOOTSTRAP_DIR' && npm prune --omit=dev" frame || true
+    else
       warn "Build step failed; you may need to ship a pre-built release tarball."
+    fi
     ln -snf "$BOOTSTRAP_DIR" /opt/frame/current
   else
     warn "Could not fetch initial release. You can deploy manually into /opt/frame/releases/<tag>/"

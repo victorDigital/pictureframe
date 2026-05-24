@@ -200,8 +200,9 @@ export class Updater {
         snapshotsDir: paths.snapshotsDir,
       });
 
-      await exec("npm", ["ci", "--omit=dev"], { cwd: staging });
+      await exec("npm", ["ci"], { cwd: staging });
       await exec("npm", ["run", "build"], { cwd: staging });
+      await exec("npm", ["prune", "--omit=dev"], { cwd: staging });
 
       const migResult = await applyPending({
         history,

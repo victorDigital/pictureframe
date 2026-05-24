@@ -20,8 +20,9 @@ curl -fsSL "https://api.github.com/repos/$REPO/tarball/$TAG" \
   | tar -xz --strip-components=1 -C "$STAGING"
 
 cd "$STAGING"
-npm ci --omit=dev
+npm ci
 npm run build
+npm prune --omit=dev
 
 mv "$STAGING" "$RELEASE"
 ln -snf "$RELEASE" /opt/frame/current
