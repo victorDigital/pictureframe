@@ -1,6 +1,5 @@
 import EventEmitter from "node:events";
-import { ChromiumProcess } from "./launcher.js";
-import { PipeTransport } from "./pipeTransport.js";
+import { WsTransport } from "./wsTransport.js";
 import { sub } from "../util/logger.js";
 
 const log = sub("cdp.manager");
@@ -15,32 +14,34 @@ type TargetInfo = {
 };
 
 export class CdpManager extends EventEmitter {
-  private transport?: PipeTransport;
-  private chromium?: ChromiumProcess;
+  private transport?: WsTransport;
   private targets = new Map<TabId, TargetInfo>();
   private sessions = new Map<TabId, string>();
   private loadResolvers = new Map<TabId, Array<() => void>>();
   private consoleByTab = new Map<TabId, Array<{ level: string; text: string }>>();
+  private shellTabId?: TabId;
 
   isConnected(): boolean {
     return Boolean(this.transport);
   }
 
+  shellTab(): TabId | undefined {
+    return this.shellTabId;
+  }
+
   async start(opts: {
-    chromiumBin?: string;
     shellUrl: string;
-    userDataDir?: string;
+    cdpHost?: string;
+    cdpPort?: number;
   }) {
-    this.chromium = new ChromiumProcess({
-      chromiumBin: opts.chromiumBin,
-      startUrl: opts.shellUrl,
-      userDataDir: opts.userDataDir,
-    });
-    const { writeFd, readFd } = this.chromium.start();
-    this.transport = new PipeTransport(writeFd, readFd);
+    const host = opts.cdpHost ?? process.env.FRAME_CDP_HOST ?? "127.0.0.1";
+    const port = Number(opts.cdpPort ?? process.env.FRAME_CDP_PORT ?? 9222);
+
+    log.info({ host, port }, "connecting to chromium CDP");
+    this.transport = await WsTransport.connect(host, port);
     this.transport.on("event", (m) => this.onEvent(m as never));
     this.transport.on("error", (err) => log.warn({ err }, "cdp transport error"));
-    this.chromium.on("exit", () => this.emit("chromium_exit"));
+    this.transport.on("close", () => this.emit("chromium_exit"));
 
     await this.transport.send("Target.setDiscoverTargets", { discover: true });
     const { targetInfos } = await this.transport.send<{ targetInfos: TargetInfo[] }>(
@@ -50,9 +51,12 @@ export class CdpManager extends EventEmitter {
       if (t.type === "page") {
         this.targets.set(t.targetId, t);
         await this.attach(t.targetId);
+        if (!this.shellTabId && t.url.startsWith(opts.shellUrl)) {
+          this.shellTabId = t.targetId;
+        }
       }
     }
-    log.info({ tabs: this.targets.size }, "CDP attached");
+    log.info({ tabs: this.targets.size, shellTab: this.shellTabId }, "CDP attached");
   }
 
   private onEvent(msg: { method: string; params?: any; sessionId?: string }) {
@@ -197,6 +201,7 @@ export class CdpManager extends EventEmitter {
   }
 
   async stop() {
-    await this.chromium?.stop();
+    this.transport?.close();
+    this.transport = undefined;
   }
 }

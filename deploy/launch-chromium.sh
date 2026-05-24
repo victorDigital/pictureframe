@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 # Launched by cage as its single Wayland client. cage exits when its
-# client exits, so this process is the kiosk's lifetime. We exec Chromium
-# directly, pointed at the shell page that frame-core serves. The shell
-# page talks to frame-core over HTTP/WS for state, screen selection, etc.
+# client exits, so this process is the kiosk's lifetime.
 #
-# CDP-based features (URL-screen tab management, screenshot transitions)
-# would require a second mechanism to hand a CDP endpoint from this
-# chromium back to frame-core; not wired yet.
+# We expose CDP on 127.0.0.1:9222 so frame-core can drive separate
+# Chromium tabs for URL screens (SPEC §4.1). The port is loopback-only
+# and Chromium refuses CDP without --remote-allow-origins; we allow the
+# frame-core HTTP origin which is also loopback. Anyone who can reach
+# 127.0.0.1 on this device can already control everything, so this does
+# not widen the trust surface.
 set -euo pipefail
 
 CHROMIUM_BIN="${FRAME_CHROMIUM_BIN:-chromium}"
 SHELL_URL="${FRAME_SHELL_URL:-http://127.0.0.1:8080/shell/}"
 USER_DATA_DIR="${FRAME_USER_DATA_DIR:-/home/frame/.config/frame-chromium}"
+CDP_PORT="${FRAME_CDP_PORT:-9222}"
 
 mkdir -p "$USER_DATA_DIR"
 
@@ -26,4 +28,7 @@ exec "$CHROMIUM_BIN" \
   --disable-pinch \
   --overscroll-history-navigation=0 \
   --user-data-dir="$USER_DATA_DIR" \
+  --remote-debugging-port="$CDP_PORT" \
+  --remote-debugging-address=127.0.0.1 \
+  --remote-allow-origins=http://127.0.0.1:8080 \
   "$SHELL_URL"

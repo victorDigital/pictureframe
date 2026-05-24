@@ -130,16 +130,21 @@ async function main() {
     log.warn({ err }, "could not apply default brightness"),
   );
 
+  // Always start the scheduler so the clock comes up immediately; CDP
+  // connects to cage's chromium asynchronously and is required only for
+  // URL-screen tab management. If CDP never becomes ready, URL screens
+  // fall back to the iframe path (see ScreenController.show).
+  scheduler.start();
+
   if (process.env.FRAME_DISABLE_CDP !== "1") {
     cdp
       .start({ shellUrl: "http://127.0.0.1:8080/shell/" })
       .then(() => {
+        const shellTab = cdp.shellTab();
+        if (shellTab) screens.setShellTab(shellTab);
         screens.registerScreens(store.current.screens);
-        scheduler.start();
       })
-      .catch((err) => log.error({ err }, "CDP failed to start; running in headless mode"));
-  } else {
-    scheduler.start();
+      .catch((err) => log.error({ err }, "CDP failed to start; URL screens limited to iframe mode"));
   }
 
   updater.start();

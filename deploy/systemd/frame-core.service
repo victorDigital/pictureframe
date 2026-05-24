@@ -13,11 +13,11 @@ Environment=FRAME_CONFIG=/etc/frame/frame.yaml
 Environment=FRAME_STATE_DIR=/opt/frame/state
 Environment=FRAME_RELEASES_DIR=/opt/frame/releases
 Environment=FRAME_RUNTIME_DIR=/run/frame
-# Cage launches its own chromium (see deploy/launch-chromium.sh).
-# frame-core does not currently have a way to spawn a chromium into the
-# existing cage Wayland session, so the in-process CDP launcher is
-# disabled here. URL-screen / screenshot-transition features are skipped.
-Environment=FRAME_DISABLE_CDP=1
+# Cage's chromium is launched with --remote-debugging-port=9222 on
+# loopback; frame-core connects to it via WsTransport for URL-screen
+# tab management (see deploy/launch-chromium.sh + core/src/cdp/).
+Environment=FRAME_CDP_HOST=127.0.0.1
+Environment=FRAME_CDP_PORT=9222
 ExecStart=/usr/bin/node /opt/frame/current/core/dist/index.js
 Restart=on-failure
 RestartSec=3
