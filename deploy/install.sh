@@ -379,4 +379,46 @@ if systemctl list-unit-files | grep -q frame-core.service; then
   systemctl restart frame-kiosk.service || warn "frame-kiosk failed to start; check 'journalctl -u frame-kiosk'"
 fi
 
-log "Done. mDNS hostname: frame.local — UI: http://frame.local:8080"
+###############################################################################
+# 14. Final status — service health, reachable URLs
+###############################################################################
+
+# Give services a moment to come up before reading their status.
+sleep 2
+
+CORE_STATE="$(systemctl is-active frame-core.service 2>/dev/null || true)"
+KIOSK_STATE="$(systemctl is-active frame-kiosk.service 2>/dev/null || true)"
+
+log "Service status:"
+log "  frame-core:  $CORE_STATE"
+log "  frame-kiosk: $KIOSK_STATE"
+
+log "Reach the UI from another machine on the LAN at:"
+IP_FOUND=0
+if command -v ip >/dev/null 2>&1; then
+  while IFS= read -r ip; do
+    [[ -z "$ip" ]] && continue
+    log "  http://$ip:8080"
+    IP_FOUND=1
+  done < <(ip -o -4 addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1)
+fi
+if [[ "$IP_FOUND" -eq 0 ]]; then
+  warn "  (no global IPv4 addresses found — check 'ip addr')"
+fi
+
+HOST_SHORT="$(hostname -s 2>/dev/null || hostname || true)"
+if [[ -n "$HOST_SHORT" ]] && systemctl is-active --quiet avahi-daemon 2>/dev/null; then
+  log "  http://${HOST_SHORT}.local:8080  (mDNS — requires Bonjour/Avahi on client)"
+  if [[ "$HOST_SHORT" != "frame" ]]; then
+    log "  To make this 'frame.local', run: hostnamectl set-hostname frame"
+  fi
+fi
+
+if [[ "$KIOSK_STATE" != "active" ]]; then
+  warn "frame-kiosk is not active. Common causes:"
+  warn "  - Running in a VM without GPU/DRM passthrough (cage needs KMS)"
+  warn "  - tty1 in use by a desktop environment"
+  warn "  Check: journalctl -u frame-kiosk -n 100 --no-pager"
+fi
+
+log "Done."
