@@ -64,7 +64,7 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
   const app = Fastify({ logger: false, trustProxy: true });
   await app.register(fastifyWebsocket);
 
-  const repoRoot = path.resolve(process.cwd(), "..");
+  const repoRoot = process.cwd();
   const webDist = path.join(repoRoot, "web", "dist");
   const kioskDist = path.join(repoRoot, "kiosk", "dist");
   const builtinRoot = path.join(repoRoot, "builtin-screens");

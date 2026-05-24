@@ -23,7 +23,7 @@ const log = sub("main");
 async function readVersion(): Promise<string> {
   try {
     const pkg = JSON.parse(
-      await fs.readFile(path.resolve(process.cwd(), "..", "package.json"), "utf8"),
+      await fs.readFile(path.resolve(process.cwd(), "package.json"), "utf8"),
     ) as { version?: string };
     return pkg.version ?? "0.0.0";
   } catch {

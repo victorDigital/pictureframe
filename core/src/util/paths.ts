@@ -9,7 +9,7 @@ export const paths = {
   current: process.env.FRAME_CURRENT ?? "/opt/frame/current",
   staticRoot:
     process.env.FRAME_STATIC_ROOT ??
-    path.resolve(process.cwd(), ".."),
+    process.cwd(),
 };
 
 export const stateFile = (...parts: string[]) =>
