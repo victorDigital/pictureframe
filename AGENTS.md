@@ -79,6 +79,14 @@ npm run build
 to spawn Chromium. Most code paths can be exercised against the web UI
 on `http://localhost:5181`.
 
+`node-pty` is a native dependency used by the Terminal section
+(`/api/terminal`). It ships prebuilt binaries for darwin x64/arm64 and
+linux x64/arm64/armv7; if no prebuild matches the host npm falls back
+to compiling from source, which needs `python3`, `make` and a C++
+compiler (`g++`). The Debian-based install path covers this implicitly
+because the NodeSource setup script installs `build-essential`, but if
+you switch base images keep that in mind.
+
 When you're editing the web UI, the new section likely needs an entry in
 `web/src/App.tsx` AND a backend route in `core/src/api/server.ts`. Bearer
 auth is enforced by an `onRequest` hook — see `UNAUTH_PATHS` and the
