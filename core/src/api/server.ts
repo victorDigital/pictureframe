@@ -172,16 +172,27 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
     const result = ScreensFileSchema.safeParse({ screens: req.body?.screens });
     if (!result.success) {
       reply.code(400);
-      return { error: "invalid_screens", details: result.error.flatten() };
+      return {
+        error: "invalid_screens",
+        message: "Screen list did not match the expected shape.",
+        details: result.error.flatten(),
+      };
     }
     const cfg = deps.configStore.current.config;
     if (!cfg.screens_file) {
       reply.code(409);
-      return { error: "safe_mode_no_screens_file" };
+      return {
+        error: "safe_mode_no_screens_file",
+        message: "Cannot save screens in safe mode (no screens_file configured).",
+      };
     }
     if (!result.data.screens.some((s) => s.id === cfg.default_screen)) {
       reply.code(400);
-      return { error: "default_screen_missing", details: { default_screen: cfg.default_screen } };
+      return {
+        error: "default_screen_missing",
+        message: `Cannot remove "${cfg.default_screen}" — it is set as default_screen in frame.yaml. Change default_screen first.`,
+        details: { default_screen: cfg.default_screen },
+      };
     }
     await writeScreens(cfg.screens_file, result.data.screens);
     await deps.configStore.reload();

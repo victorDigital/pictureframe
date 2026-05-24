@@ -8,6 +8,9 @@ type PropSchema = {
   description?: string;
   minimum?: number;
   maximum?: number;
+  items?: PropSchema & { required?: string[]; properties?: Record<string, PropSchema> };
+  properties?: Record<string, PropSchema>;
+  required?: string[];
 };
 
 type BuiltinManifest = {
@@ -21,6 +24,46 @@ type BuiltinManifest = {
     properties?: Record<string, PropSchema>;
   };
 };
+
+function validateConfig(
+  config: Record<string, unknown> | undefined,
+  schema: BuiltinManifest["config_schema"],
+): string[] {
+  if (!schema?.properties) return [];
+  const errors: string[] = [];
+  const cfg = config ?? {};
+  for (const key of schema.required ?? []) {
+    const v = cfg[key];
+    if (v === undefined || v === null || v === "") {
+      errors.push(`"${key}" is required`);
+    }
+  }
+  for (const [key, prop] of Object.entries(schema.properties)) {
+    const v = cfg[key];
+    if (v === undefined || v === null || v === "") continue;
+    if (prop.enum && !prop.enum.includes(String(v))) {
+      errors.push(`"${key}" must be one of: ${prop.enum.join(", ")}`);
+    }
+    if ((prop.type === "integer" || prop.type === "number") && typeof v !== "number") {
+      errors.push(`"${key}" must be a number`);
+    }
+    if (prop.type === "boolean" && typeof v !== "boolean") {
+      errors.push(`"${key}" must be a boolean`);
+    }
+    if (prop.type === "array" && !Array.isArray(v)) {
+      errors.push(`"${key}" must be an array`);
+    }
+    if (typeof v === "number") {
+      if (prop.minimum !== undefined && v < prop.minimum) {
+        errors.push(`"${key}" must be ≥ ${prop.minimum}`);
+      }
+      if (prop.maximum !== undefined && v > prop.maximum) {
+        errors.push(`"${key}" must be ≤ ${prop.maximum}`);
+      }
+    }
+  }
+  return errors;
+}
 
 type Screen = {
   id: string;
@@ -73,8 +116,12 @@ export function ScreensSection() {
   async function remove(id: string) {
     if (!confirm(`Delete screen "${id}"?`)) return;
     const next = screens.filter((s) => s.id !== id);
-    await api("/api/screens", { method: "PUT", body: JSON.stringify({ screens: next }) });
-    refresh();
+    try {
+      await api("/api/screens", { method: "PUT", body: JSON.stringify({ screens: next }) });
+      refresh();
+    } catch (e) {
+      setErr(String(e instanceof Error ? e.message : e));
+    }
   }
 
   async function test(id: string) {
@@ -88,22 +135,29 @@ export function ScreensSection() {
   }
 
   async function save(updated: Screen) {
-    const others = screens.filter((s) => s.id !== updated.id);
     const exists = screens.find((s) => s.id === updated.id);
-    const next = exists ? screens.map((s) => (s.id === updated.id ? updated : s)) : [...others, updated];
+    const next = exists ? screens.map((s) => (s.id === updated.id ? updated : s)) : [...screens, updated];
     try {
       await api("/api/screens", { method: "PUT", body: JSON.stringify({ screens: next }) });
       setEditing(null);
       refresh();
     } catch (e) {
-      setErr(String(e));
+      setErr(String(e instanceof Error ? e.message : e));
     }
   }
 
-  if (err) return <div className="banner">{err}</div>;
-
   if (editing) {
-    return <ScreenEditor screen={editing} onCancel={() => setEditing(null)} onSave={save} />;
+    return (
+      <ScreenEditor
+        screen={editing}
+        onCancel={() => {
+          setEditing(null);
+          setErr(null);
+        }}
+        onSave={save}
+        error={err}
+      />
+    );
   }
 
   const allTags = Array.from(new Set(screens.flatMap((s) => s.tags ?? []))).sort();
@@ -113,6 +167,14 @@ export function ScreensSection() {
 
   return (
     <>
+      {err && (
+        <div className="banner" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <span style={{ flex: 1 }}>{err}</span>
+          <button className="secondary" onClick={() => setErr(null)}>
+            Dismiss
+          </button>
+        </div>
+      )}
       <div className="tile">
         <h2>Screens</h2>
         {allTags.length > 0 && (
@@ -245,14 +307,17 @@ function ScreenEditor({
   screen,
   onCancel,
   onSave,
+  error,
 }: {
   screen: Screen;
   onCancel: () => void;
   onSave: (s: Screen) => void;
+  error?: string | null;
 }) {
   const [draft, setDraft] = useState<Screen>(screen);
   const [builtins, setBuiltins] = useState<BuiltinManifest[]>([]);
   const [rawJson, setRawJson] = useState(false);
+  const [tagInput, setTagInput] = useState<string>((screen.tags ?? []).join(", "));
 
   useEffect(() => {
     api<{ builtins: BuiltinManifest[] }>("/api/builtins")
@@ -265,10 +330,19 @@ function ScreenEditor({
     [builtins, draft.type, draft.source],
   );
 
+  const validationErrors = useMemo(
+    () => (manifest ? validateConfig(draft.config, manifest.config_schema) : []),
+    [manifest, draft.config],
+  );
+
   const update = <K extends keyof Screen>(key: K, value: Screen[K]) =>
     setDraft({ ...draft, [key]: value });
-  const updateConfig = (k: string, v: unknown) =>
-    setDraft({ ...draft, config: { ...(draft.config ?? {}), [k]: v } });
+  const updateConfig = (k: string, v: unknown) => {
+    const next = { ...(draft.config ?? {}) };
+    if (v === undefined) delete next[k];
+    else next[k] = v;
+    setDraft({ ...draft, config: Object.keys(next).length ? next : undefined });
+  };
 
   function renderManifestField(key: string, schema: PropSchema) {
     const current = draft.config?.[key];
@@ -279,7 +353,7 @@ function ScreenEditor({
       return (
         <select
           value={String(value ?? "")}
-          onChange={(e) => updateConfig(key, e.target.value)}
+          onChange={(e) => updateConfig(key, e.target.value || undefined)}
           style={selectStyle}
         >
           <option value="">(unset)</option>
@@ -319,6 +393,40 @@ function ScreenEditor({
       );
     }
 
+    if (schema.type === "array") {
+      const arrValue = Array.isArray(value) ? value : [];
+      return (
+        <textarea
+          rows={Math.max(3, arrValue.length + 1)}
+          defaultValue={JSON.stringify(arrValue, null, 2)}
+          onChange={(e) => {
+            const text = e.target.value.trim();
+            if (!text) {
+              updateConfig(key, undefined);
+              return;
+            }
+            try {
+              const parsed = JSON.parse(text) as unknown;
+              if (Array.isArray(parsed)) updateConfig(key, parsed);
+            } catch {
+              // keep last valid value until JSON parses
+            }
+          }}
+          style={{
+            width: "100%",
+            background: "var(--bg)",
+            color: "var(--text)",
+            border: "1px solid var(--border)",
+            borderRadius: "0.4rem",
+            padding: "0.5rem",
+            fontFamily: "ui-monospace, monospace",
+            fontSize: "0.85rem",
+            boxSizing: "border-box",
+          }}
+        />
+      );
+    }
+
     return (
       <input
         type="text"
@@ -328,9 +436,16 @@ function ScreenEditor({
     );
   }
 
+  const builtinSourceMissing =
+    draft.type === "builtin" &&
+    draft.source !== "" &&
+    builtins.length > 0 &&
+    !builtins.some((b) => b.id === draft.source);
+
   return (
     <div className="tile">
       <h2>{screen.id ? `Edit: ${screen.id}` : "New screen"}</h2>
+      {error && <div className="banner" style={{ marginBottom: "0.75rem" }}>{error}</div>}
       <label>ID (lowercase, hyphenated)</label>
       <input
         type="text"
@@ -359,6 +474,9 @@ function ScreenEditor({
           style={selectStyle}
         >
           <option value="">— pick one —</option>
+          {builtinSourceMissing && (
+            <option value={draft.source}>{draft.source} (unknown)</option>
+          )}
           {builtins.map((b) => (
             <option key={b.id} value={b.id}>
               {b.name ?? b.id}
@@ -401,6 +519,20 @@ function ScreenEditor({
         />
         Preload (keep in memory)
       </label>
+
+      <label style={{ marginTop: "0.75rem", display: "block" }}>Tags (comma separated)</label>
+      <input
+        type="text"
+        value={tagInput}
+        onChange={(e) => {
+          setTagInput(e.target.value);
+          const tags = e.target.value
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean);
+          update("tags", tags.length ? tags : undefined);
+        }}
+      />
 
       <div style={{ marginTop: "1rem", borderTop: "1px solid var(--border)", paddingTop: "1rem" }}>
         <div className="row" style={{ alignItems: "baseline" }}>
@@ -467,11 +599,37 @@ function ScreenEditor({
         )}
       </div>
 
+      {validationErrors.length > 0 && (
+        <div
+          style={{
+            marginTop: "0.75rem",
+            background: "rgba(255, 120, 80, 0.12)",
+            border: "1px solid rgba(255, 120, 80, 0.4)",
+            color: "var(--danger)",
+            padding: "0.5rem 0.75rem",
+            borderRadius: "0.4rem",
+            fontSize: "0.85rem",
+          }}
+        >
+          <strong>Config issues:</strong>
+          <ul style={{ margin: "0.25rem 0 0 1rem" }}>
+            {validationErrors.map((m, i) => (
+              <li key={i}>{m}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="row" style={{ marginTop: "1rem" }}>
         <button
           className="primary"
           onClick={() => onSave(draft)}
-          disabled={!draft.id || !draft.name || !draft.source}
+          disabled={
+            !draft.id ||
+            !draft.name ||
+            !draft.source ||
+            validationErrors.length > 0
+          }
         >
           Save
         </button>
