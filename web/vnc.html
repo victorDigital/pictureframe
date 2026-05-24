@@ -55,10 +55,15 @@
         statusEl.className = cls ?? "";
       }
 
+      const VNC_USERNAME = "frame";
+
       let rfb;
       function connect(password) {
         try {
-          rfb = new RFB(screenEl, url, password ? { credentials: { password } } : {});
+          const credentials = password
+            ? { username: VNC_USERNAME, password }
+            : { username: VNC_USERNAME };
+          rfb = new RFB(screenEl, url, { credentials });
           rfb.scaleViewport = true;
           rfb.resizeSession = false;
           rfb.background = "#000";
@@ -86,7 +91,7 @@
         e.preventDefault();
         promptEl.style.display = "none";
         if (rfb) {
-          rfb.sendCredentials({ password: passwordEl.value });
+          rfb.sendCredentials({ username: VNC_USERNAME, password: passwordEl.value });
         } else {
           connect(passwordEl.value);
         }
