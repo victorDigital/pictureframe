@@ -37,6 +37,10 @@ export class VncSupervisor {
     this.runtimeDir = paths.runtimeDir;
   }
 
+  updatePasswordFile(file: string | undefined) {
+    this.passwordFile = file;
+  }
+
   status(): VncStatus {
     return {
       running: Boolean(this.wayvnc),

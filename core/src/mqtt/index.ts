@@ -26,6 +26,20 @@ export class HaBridge {
     const mqtt = cfg.ha.mqtt;
     this.discoveryPrefix = mqtt?.discovery_prefix ?? "homeassistant";
     this.nodeId = `frame_${cfg.device.name.replace(/[^a-z0-9_]/gi, "_")}`;
+    this.scheduler.on("activate", () => this.publishState());
+  }
+
+  updateConfig(cfg: FrameConfig) {
+    this.cfg = cfg;
+    this.discoveryPrefix = cfg.ha.mqtt?.discovery_prefix ?? "homeassistant";
+    this.nodeId = `frame_${cfg.device.name.replace(/[^a-z0-9_]/gi, "_")}`;
+  }
+
+  async restart() {
+    this.stop();
+    if (this.cfg.ha.enabled && this.cfg.ha.mqtt) {
+      await this.start();
+    }
   }
 
   status() {
@@ -95,12 +109,12 @@ export class HaBridge {
         log.error({ err, topic }, "command handler failed"),
       );
     });
-
-    this.scheduler.on("activate", () => this.publishState());
   }
 
   stop() {
     this.client?.end(true);
+    this.client = undefined;
+    this.state = "disconnected";
   }
 
   private stateTopic(suffix: string) {

@@ -20,6 +20,15 @@ export const ScreensFileSchema = z.object({
 
 export type ScreensFile = z.infer<typeof ScreensFileSchema>;
 
+const HOSTNAME_RE = /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(?:\.(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?))*$/;
+const IPV4_RE = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+const hostnameOrIp = z
+  .string()
+  .min(1)
+  .refine((s) => IPV4_RE.test(s) || HOSTNAME_RE.test(s), {
+    message: "must be a hostname or IPv4 address",
+  });
+
 export const FrameConfigSchema = z
   .object({
     device: z.object({
@@ -54,7 +63,7 @@ export const FrameConfigSchema = z
         enabled: z.boolean().default(false),
         mqtt: z
           .object({
-            host: z.string().min(1),
+            host: hostnameOrIp,
             port: z.number().int().min(1).max(65535).default(1883),
             username: z.string().min(1),
             password_file: z.string().min(1),
@@ -75,3 +84,67 @@ export const FrameConfigSchema = z
   .strict();
 
 export type FrameConfig = z.infer<typeof FrameConfigSchema>;
+
+export const FrameConfigPatchSchema = z
+  .object({
+    device: z
+      .object({
+        name: z.string().min(1).optional(),
+      })
+      .strict()
+      .optional(),
+    display: z
+      .object({
+        brightness_backend: z.enum(["backlight", "ddcutil", "none"]).optional(),
+        backlight_device: z.string().optional(),
+        default_brightness: z.number().int().min(0).max(100).optional(),
+      })
+      .strict()
+      .optional(),
+    default_screen: z.string().min(1).optional(),
+    manual_pinned_timeout_hours: z.number().int().min(0).max(168).optional(),
+    scheduler: z
+      .object({
+        max_preloaded_url_screens: z.number().int().min(1).max(20).optional(),
+      })
+      .strict()
+      .optional(),
+    updater: z
+      .object({
+        repo: z.string().regex(/^[^/]+\/[^/]+$/, "expected owner/repo").optional(),
+        channel: z.enum(["stable", "beta"]).optional(),
+        poll_interval_min: z.number().int().min(1).max(1440).optional(),
+        auto_apply: z.boolean().optional(),
+        staging_delay_hours: z.number().int().min(0).max(720).optional(),
+        health_check_window_sec: z.number().int().min(5).max(3600).optional(),
+        retain_releases: z.number().int().min(1).max(20).optional(),
+      })
+      .strict()
+      .optional(),
+    ha: z
+      .object({
+        enabled: z.boolean().optional(),
+        mqtt: z
+          .object({
+            host: hostnameOrIp.optional(),
+            port: z.number().int().min(1).max(65535).optional(),
+            username: z.string().min(1).optional(),
+            keepalive: z.number().int().min(5).max(3600).optional(),
+            discovery_prefix: z.string().min(1).optional(),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict()
+      .optional(),
+    vnc: z
+      .object({
+        enabled: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+    builtins: z.record(z.object({ enabled: z.boolean() }).passthrough()).optional(),
+  })
+  .strict();
+
+export type FrameConfigPatch = z.infer<typeof FrameConfigPatchSchema>;

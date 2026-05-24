@@ -33,6 +33,10 @@ export class Scheduler extends EventEmitter {
     this.screens = new Map(screens.map((s) => [s.id, s]));
   }
 
+  setPinnedTimeoutHours(hours: number) {
+    this.pinnedTimeoutMs = hours * 3_600_000;
+  }
+
   updateDefault(screenId: string) {
     this.defaultScreenId = screenId;
     this.installDefault();

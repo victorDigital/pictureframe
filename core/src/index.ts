@@ -31,6 +31,10 @@ async function readVersion(): Promise<string> {
   }
 }
 
+function haSignature(cfg: { ha: { enabled: boolean; mqtt?: unknown }; device: { name: string } }) {
+  return JSON.stringify({ enabled: cfg.ha.enabled, mqtt: cfg.ha.mqtt ?? null, name: cfg.device.name });
+}
+
 async function main() {
   const version = await readVersion();
   log.info({ version, paths }, "frame-core starting");
@@ -90,9 +94,37 @@ async function main() {
     void pushState(screen.id);
   });
 
+  let lastDefaultScreen = store.current.config.default_screen;
+  let lastHaSig = haSignature(store.current.config);
+
   store.on("reloaded", (state) => {
     scheduler.setScreens(state.screens);
     screens.registerScreens(state.screens);
+
+    const cfg = state.config;
+    if (cfg.default_screen && cfg.default_screen !== lastDefaultScreen) {
+      try {
+        scheduler.updateDefault(cfg.default_screen);
+        lastDefaultScreen = cfg.default_screen;
+      } catch (err) {
+        log.warn({ err }, "could not apply new default_screen");
+      }
+    }
+    scheduler.setPinnedTimeoutHours(cfg.manual_pinned_timeout_hours);
+    screens.setMaxPreloaded(cfg.scheduler.max_preloaded_url_screens);
+    brightness.updateConfig(cfg);
+    vnc.updatePasswordFile(cfg.vnc?.password_file);
+
+    if (cfg.vnc?.enabled === false) {
+      vnc.stop();
+    }
+
+    const nextHaSig = haSignature(cfg);
+    if (nextHaSig !== lastHaSig && process.env.FRAME_HA_DISABLE !== "1") {
+      lastHaSig = nextHaSig;
+      ha.updateConfig(cfg);
+      ha.restart().catch((err) => log.error({ err }, "ha restart failed"));
+    }
   });
 
   // The shell page connects asynchronously after frame-core boots. Any

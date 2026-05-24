@@ -168,3 +168,56 @@ test("POST /family-message returns 403 when disabled in config", async () => {
   assert.equal(r.statusCode, 403);
   await app.close();
 });
+
+test("GET /api/settings/config exposes the editable config without secrets", async () => {
+  const deps = await makeDeps();
+  const app = await createServer({ ...deps, version: "v0.0.0-test" });
+  const r = await app.inject({
+    method: "GET",
+    url: "/api/settings/config",
+    headers: { authorization: "Bearer " + "x".repeat(24) },
+  });
+  assert.equal(r.statusCode, 200);
+  const body = JSON.parse(r.body);
+  assert.equal(body.device.name, "test-frame");
+  assert.equal(body.ha.enabled, false);
+  assert.equal(body.updater.repo, "victorDigital/pictureframe");
+  assert.equal(body.default_screen, "clock");
+  await app.close();
+});
+
+test("PUT /api/settings/config rejects invalid host", async () => {
+  const deps = await makeDeps();
+  const app = await createServer({ ...deps, version: "v0.0.0-test" });
+  const r = await app.inject({
+    method: "PUT",
+    url: "/api/settings/config",
+    headers: {
+      authorization: "Bearer " + "x".repeat(24),
+      "content-type": "application/json",
+    },
+    payload: JSON.stringify({ ha: { mqtt: { host: "not a host" } } }),
+  });
+  assert.equal(r.statusCode, 400);
+  const body = JSON.parse(r.body);
+  assert.equal(body.error, "invalid_patch");
+  await app.close();
+});
+
+test("PUT /api/settings/config rejects unknown default_screen", async () => {
+  const deps = await makeDeps();
+  const app = await createServer({ ...deps, version: "v0.0.0-test" });
+  const r = await app.inject({
+    method: "PUT",
+    url: "/api/settings/config",
+    headers: {
+      authorization: "Bearer " + "x".repeat(24),
+      "content-type": "application/json",
+    },
+    payload: JSON.stringify({ default_screen: "nope" }),
+  });
+  assert.equal(r.statusCode, 400);
+  const body = JSON.parse(r.body);
+  assert.equal(body.error, "default_screen_missing");
+  await app.close();
+});

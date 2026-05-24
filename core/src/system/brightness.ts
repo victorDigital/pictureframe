@@ -11,6 +11,10 @@ const log = sub("brightness");
 export class Brightness {
   constructor(private cfg: FrameConfig) {}
 
+  updateConfig(cfg: FrameConfig) {
+    this.cfg = cfg;
+  }
+
   async read(): Promise<number> {
     const backend = this.cfg.display.brightness_backend;
     if (backend === "backlight") {

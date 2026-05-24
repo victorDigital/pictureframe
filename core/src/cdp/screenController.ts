@@ -29,6 +29,13 @@ export class ScreenController {
     this.shellTabId = tabId;
   }
 
+  setMaxPreloaded(n: number) {
+    this.maxPreloaded = n;
+    while (this.urlTabs.size > this.maxPreloaded) {
+      this.evictOldest();
+    }
+  }
+
   registerScreens(screens: Screen[]) {
     const preloadable = screens.filter((s) => s.type === "url" && s.preload);
     const first = preloadable.slice(0, this.maxPreloaded);

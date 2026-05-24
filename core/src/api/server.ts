@@ -10,8 +10,9 @@ import { ScreenController } from "../cdp/screenController.js";
 import { ShellBus } from "./shellBus.js";
 import { TerminalSession } from "./terminal.js";
 import { sub } from "../util/logger.js";
-import { ScreensFileSchema, Screen } from "../config/schema.js";
+import { ScreensFileSchema, Screen, FrameConfigPatchSchema } from "../config/schema.js";
 import { writeScreens } from "../config/load.js";
+import { applyConfigPatch } from "../config/write.js";
 import { Updater } from "../updater/index.js";
 import { Brightness } from "../system/brightness.js";
 import { CdpManager } from "../cdp/manager.js";
@@ -371,6 +372,94 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
 
   // ---- settings -------------------------------------------------------------
 
+  app.get("/api/settings/config", async () => {
+    const cfg = deps.configStore.current.config;
+    // Note: password_file paths and bearer_token_file are reported so the UI
+    // can show where secrets live, but secret contents are never returned.
+    return {
+      safe_mode: deps.configStore.isSafeMode(),
+      device: {
+        name: cfg.device.name,
+        bearer_token_file: cfg.device.bearer_token_file,
+      },
+      display: {
+        brightness_backend: cfg.display.brightness_backend,
+        backlight_device: cfg.display.backlight_device ?? null,
+        default_brightness: cfg.display.default_brightness,
+      },
+      screens_file: cfg.screens_file,
+      default_screen: cfg.default_screen,
+      manual_pinned_timeout_hours: cfg.manual_pinned_timeout_hours,
+      scheduler: {
+        max_preloaded_url_screens: cfg.scheduler.max_preloaded_url_screens,
+      },
+      updater: {
+        repo: cfg.updater.repo,
+        channel: cfg.updater.channel,
+        poll_interval_min: cfg.updater.poll_interval_min,
+        auto_apply: cfg.updater.auto_apply,
+        staging_delay_hours: cfg.updater.staging_delay_hours,
+        health_check_window_sec: cfg.updater.health_check_window_sec,
+        retain_releases: cfg.updater.retain_releases,
+        signing_key_file: cfg.updater.signing_key_file ?? null,
+      },
+      ha: {
+        enabled: cfg.ha.enabled,
+        mqtt: cfg.ha.mqtt
+          ? {
+              host: cfg.ha.mqtt.host,
+              port: cfg.ha.mqtt.port,
+              username: cfg.ha.mqtt.username,
+              password_file: cfg.ha.mqtt.password_file,
+              keepalive: cfg.ha.mqtt.keepalive,
+              discovery_prefix: cfg.ha.mqtt.discovery_prefix,
+            }
+          : null,
+      },
+      vnc: cfg.vnc
+        ? { enabled: cfg.vnc.enabled, password_file: cfg.vnc.password_file }
+        : null,
+      builtins: cfg.builtins as Record<string, unknown>,
+    };
+  });
+
+  app.put<{ Body: unknown }>("/api/settings/config", async (req, reply) => {
+    const current = deps.configStore.current.config;
+    if (deps.configStore.isSafeMode() || !current.device.bearer_token_file) {
+      reply.code(409);
+      return { error: "safe_mode_cannot_edit_config" };
+    }
+    const parsed = FrameConfigPatchSchema.safeParse(req.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return {
+        error: "invalid_patch",
+        message: "Config patch failed validation.",
+        details: parsed.error.flatten(),
+      };
+    }
+    const patch = parsed.data;
+
+    if (patch.default_screen && !deps.configStore.current.screens.some(
+      (s) => s.id === patch.default_screen,
+    )) {
+      reply.code(400);
+      return {
+        error: "default_screen_missing",
+        message: `Screen "${patch.default_screen}" is not in screens.yaml.`,
+      };
+    }
+
+    try {
+      await applyConfigPatch(paths.configFile, patch);
+    } catch (err) {
+      reply.code(500);
+      return { error: "write_failed", details: String(err) };
+    }
+    await deps.configStore.reload();
+    return { ok: true };
+  });
+
   app.get("/api/settings/updater", async () => {
     const u = deps.configStore.current.config.updater;
     return {
@@ -392,26 +481,27 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
     };
   }>("/api/settings/updater", async (req, reply) => {
     const cfgPath = deps.configStore.current.config;
-    if (!cfgPath.device.bearer_token_file) {
+    if (deps.configStore.isSafeMode() || !cfgPath.device.bearer_token_file) {
       reply.code(409);
       return { error: "safe_mode_cannot_edit_config" };
     }
-    const { default: YAML } = await import("yaml");
-    const raw = await fs.readFile(paths.configFile, "utf8");
-    const doc = YAML.parseDocument(raw);
-    const u = doc.get("updater") as { set?: (k: string, v: unknown) => void } | undefined;
-    if (!u) {
-      reply.code(500);
-      return { error: "updater_section_missing" };
+    const patch = {
+      updater: {
+        ...(req.body.channel ? { channel: req.body.channel } : {}),
+        ...(typeof req.body.auto_apply === "boolean"
+          ? { auto_apply: req.body.auto_apply }
+          : {}),
+        ...(typeof req.body.staging_delay_hours === "number"
+          ? { staging_delay_hours: req.body.staging_delay_hours }
+          : {}),
+      },
+    };
+    const parsed = FrameConfigPatchSchema.safeParse(patch);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: "invalid_patch", details: parsed.error.flatten() };
     }
-    if (req.body.channel) (u as { set: (k: string, v: unknown) => void }).set("channel", req.body.channel);
-    if (typeof req.body.auto_apply === "boolean")
-      (u as { set: (k: string, v: unknown) => void }).set("auto_apply", req.body.auto_apply);
-    if (typeof req.body.staging_delay_hours === "number")
-      (u as { set: (k: string, v: unknown) => void }).set("staging_delay_hours", req.body.staging_delay_hours);
-    const tmp = paths.configFile + ".tmp";
-    await fs.writeFile(tmp, doc.toString());
-    await fs.rename(tmp, paths.configFile);
+    await applyConfigPatch(paths.configFile, parsed.data);
     await deps.configStore.reload();
     return { ok: true };
   });
