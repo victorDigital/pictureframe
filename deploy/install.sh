@@ -142,6 +142,10 @@ BASE_PACKAGES=(
   avahi-daemon
   logrotate
   ca-certificates
+  # node-pty (terminal feature) and other native modules: prebuilds don't
+  # cover linux-arm64 reliably, so we keep the toolchain installed.
+  build-essential
+  python3
 )
 
 log "Installing base packages: ${BASE_PACKAGES[*]}"
