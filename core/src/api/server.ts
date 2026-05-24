@@ -8,6 +8,7 @@ import { ConfigStore } from "../config/state.js";
 import { Scheduler } from "../scheduler/index.js";
 import { ScreenController } from "../cdp/screenController.js";
 import { ShellBus } from "./shellBus.js";
+import { TerminalSession } from "./terminal.js";
 import { sub } from "../util/logger.js";
 import { ScreensFileSchema, Screen } from "../config/schema.js";
 import { writeScreens } from "../config/load.js";
@@ -58,7 +59,7 @@ const UNAUTH_PATHS = new Set([
   "/api/now_playing",
   "/family-message",
 ]);
-const WS_PATHS = new Set(["/ws", "/api/events"]);
+const WS_PATHS = new Set(["/ws", "/api/events", "/api/terminal"]);
 
 export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
   const app = Fastify({ logger: false, trustProxy: true });
@@ -509,6 +510,51 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
     deps.stateBus.attach(sink);
     socket.on("close", () => deps.stateBus.detach(sink));
   });
+
+  // Interactive shell. The bearer-token check in requireAuth() already
+  // ran by the time we get here (see WS_PATHS above). The shell runs as
+  // whoever frame-core runs as — the systemd unit pins this to the
+  // "frame" user, which has a deliberately narrow sudoers fragment. See
+  // core/src/api/terminal.ts for the framing/security note.
+  app.get<{ Querystring: { cols?: string; rows?: string } }>(
+    "/api/terminal",
+    { websocket: true },
+    async (socket, req) => {
+      const cols = req.query.cols ? Number(req.query.cols) : undefined;
+      const rows = req.query.rows ? Number(req.query.rows) : undefined;
+      const session = new TerminalSession(
+        {
+          send: (data) => socket.send(data),
+          close: () => socket.close(),
+          on: (event, cb) => {
+            if (event === "message") {
+              socket.on(
+                "message",
+                (data: Buffer, isBinary: boolean) =>
+                  (cb as (d: Buffer, b: boolean) => void)(data, isBinary),
+              );
+            } else if (event === "close") {
+              socket.on("close", () => (cb as () => void)());
+            }
+          },
+        },
+        { cols, rows },
+      );
+      try {
+        await session.start();
+      } catch (err) {
+        log.error({ err }, "terminal start failed");
+        try {
+          socket.send(
+            Buffer.from(`terminal_unavailable: ${(err as Error).message}\r\n`, "utf8"),
+          );
+        } catch {
+          // socket may already be gone
+        }
+        socket.close();
+      }
+    },
+  );
 
   app.setErrorHandler((err: unknown, _req, reply) => {
     const e = err as Error & { statusCode?: number };

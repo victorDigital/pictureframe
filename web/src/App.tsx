@@ -5,10 +5,19 @@ import { ScreensSection } from "./components/ScreensSection.js";
 import { SystemSection } from "./components/SystemSection.js";
 import { UpdatesSection } from "./components/UpdatesSection.js";
 import { VncSection } from "./components/VncSection.js";
+import { TerminalSection } from "./components/TerminalSection.js";
 import { SettingsSection } from "./components/SettingsSection.js";
 import { RulesSection } from "./components/RulesSection.js";
 
-type Tab = "now" | "screens" | "rules" | "system" | "updates" | "vnc" | "settings";
+type Tab =
+  | "now"
+  | "screens"
+  | "rules"
+  | "system"
+  | "updates"
+  | "vnc"
+  | "terminal"
+  | "settings";
 
 export function App() {
   const [authed, setAuthed] = useState<boolean>(Boolean(getToken()));
@@ -39,6 +48,7 @@ export function App() {
           <button data-active={tab === "system"} onClick={() => setTab("system")}>System</button>
           <button data-active={tab === "updates"} onClick={() => setTab("updates")}>Updates</button>
           <button data-active={tab === "vnc"} onClick={() => setTab("vnc")}>VNC</button>
+          <button data-active={tab === "terminal"} onClick={() => setTab("terminal")}>Terminal</button>
           <button data-active={tab === "settings"} onClick={() => setTab("settings")}>Settings</button>
         </nav>
       </aside>
@@ -54,6 +64,7 @@ export function App() {
         {tab === "system" && <SystemSection />}
         {tab === "updates" && <UpdatesSection />}
         {tab === "vnc" && <VncSection />}
+        {tab === "terminal" && <TerminalSection />}
         {tab === "settings" && <SettingsSection onSignOut={() => { setToken(null); setAuthed(false); }} />}
       </main>
     </div>
