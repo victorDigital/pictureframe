@@ -328,16 +328,20 @@ export class Updater {
     await exec("sudo", ["/usr/bin/systemctl", "restart", "frame-core"]).catch(() => {});
   }
 
-  async tailLog(lines: number, subsystem?: string) {
+  async tailLog(lines: number, subsystem?: string, unit?: string) {
+    const safeUnit = unit && /^frame-[a-z0-9-]+$/.test(unit) ? unit : "frame-core";
+    const safeLines = Math.max(1, Math.min(2000, Math.floor(Number(lines) || 200)));
     if (process.platform === "linux") {
       try {
-        const args = ["-u", "frame-core", "-n", String(lines), "--no-pager", "--output=short"];
+        const args = ["-u", safeUnit, "-n", String(safeLines), "--no-pager", "--output=short-iso"];
         const { stdout } = await exec("journalctl", args);
-        let out = stdout.trimEnd().split("\n");
+        let out = stdout.trimEnd().split("\n").filter((l) => l.length > 0);
         if (subsystem) {
-          out = out.filter((l) => l.includes(`"subsystem":"${subsystem}"`) || l.includes(subsystem));
+          out = out.filter(
+            (l) => l.includes(`"subsystem":"${subsystem}"`) || l.includes(subsystem),
+          );
         }
-        return { lines: out };
+        return { unit: safeUnit, lines: out };
       } catch {
         // fall through to update.log
       }
@@ -345,11 +349,11 @@ export class Updater {
     const file = path.join(paths.stateDir, "update.log");
     try {
       const data = await fs.readFile(file, "utf8");
-      const all = data.trimEnd().split("\n").slice(-lines);
-      if (subsystem) return { lines: all.filter((l) => l.includes(subsystem)) };
-      return { lines: all };
+      const all = data.trimEnd().split("\n").slice(-safeLines);
+      if (subsystem) return { unit: safeUnit, lines: all.filter((l) => l.includes(subsystem)) };
+      return { unit: safeUnit, lines: all };
     } catch {
-      return { lines: [] as string[] };
+      return { unit: safeUnit, lines: [] as string[] };
     }
   }
 }

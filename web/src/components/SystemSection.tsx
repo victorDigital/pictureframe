@@ -2,11 +2,15 @@ import { useEffect, useState } from "react";
 import { api } from "../api.js";
 
 const SUBSYSTEMS = ["api", "updater", "scheduler", "mqtt", "cdp", "config", "vnc"] as const;
+const UNITS = ["frame-core", "frame-kiosk"] as const;
+type Unit = (typeof UNITS)[number];
 
 export function SystemSection() {
   const [brightness, setBrightness] = useState<number>(60);
   const [err, setErr] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const [logsErr, setLogsErr] = useState<string | null>(null);
+  const [unit, setUnit] = useState<Unit>("frame-core");
   const [subsystem, setSubsystem] = useState<string>("");
 
   useEffect(() => {
@@ -16,20 +20,21 @@ export function SystemSection() {
   }, []);
 
   async function refreshLogs() {
-    const qs = new URLSearchParams({ lines: "200" });
-    if (subsystem) qs.set("subsystem", subsystem);
+    const qs = new URLSearchParams({ lines: "200", unit });
+    if (unit === "frame-core" && subsystem) qs.set("subsystem", subsystem);
     try {
       const r = await api<{ lines: string[] }>(`/api/logs?${qs}`);
       setLogs(r.lines);
+      setLogsErr(null);
     } catch (e) {
-      setErr(String(e));
+      setLogsErr(String(e));
     }
   }
   useEffect(() => {
     refreshLogs();
     const t = setInterval(refreshLogs, 5000);
     return () => clearInterval(t);
-  }, [subsystem]);
+  }, [unit, subsystem]);
 
   async function commit(v: number) {
     setBrightness(v);
@@ -78,10 +83,11 @@ export function SystemSection() {
       </div>
       <div className="tile">
         <h2>Logs</h2>
+        {logsErr && <div className="banner">{logsErr}</div>}
         <div className="row" style={{ marginBottom: "0.5rem" }}>
           <select
-            value={subsystem}
-            onChange={(e) => setSubsystem(e.target.value)}
+            value={unit}
+            onChange={(e) => setUnit(e.target.value as Unit)}
             style={{
               padding: "0.4rem",
               background: "var(--bg)",
@@ -90,7 +96,27 @@ export function SystemSection() {
               borderRadius: "0.4rem",
             }}
           >
-            <option value="">all</option>
+            {UNITS.map((u) => (
+              <option key={u} value={u}>
+                {u}
+              </option>
+            ))}
+          </select>
+          <select
+            value={subsystem}
+            onChange={(e) => setSubsystem(e.target.value)}
+            disabled={unit !== "frame-core"}
+            title={unit === "frame-core" ? "Filter by pino subsystem" : "Subsystem filter only applies to frame-core"}
+            style={{
+              padding: "0.4rem",
+              background: "var(--bg)",
+              color: "var(--text)",
+              border: "1px solid var(--border)",
+              borderRadius: "0.4rem",
+              opacity: unit === "frame-core" ? 1 : 0.5,
+            }}
+          >
+            <option value="">all subsystems</option>
             {SUBSYSTEMS.map((s) => (
               <option key={s} value={s}>
                 {s}

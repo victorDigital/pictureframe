@@ -204,6 +204,11 @@ fi
 
 # Wayland session prerequisites
 usermod -a -G video,render,input,tty,i2c frame 2>/dev/null || true
+# Read access to the system journal so `/api/logs` can tail frame-core and
+# frame-kiosk. systemd-journal exists on Debian/Ubuntu; adm is the legacy
+# fallback some distros still honour.
+usermod -a -G systemd-journal frame 2>/dev/null || true
+usermod -a -G adm frame 2>/dev/null || true
 
 install -d -o frame -g frame -m 0755 /opt/frame
 install -d -o frame -g frame -m 0755 /opt/frame/releases
