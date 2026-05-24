@@ -290,7 +290,7 @@ Three types: shell (`.sh`), config patch (`.yaml`), TypeScript (`.ts`). Numbered
 ```
 frame ALL=(root) NOPASSWD: /usr/bin/systemctl restart frame-core, \
                             /usr/bin/systemctl restart frame-kiosk, \
-                            /sbin/reboot
+                            /usr/bin/systemctl reboot
 ```
 
 OS package installs are **not** in the sudoers scope. Migrations that need OS packages mark themselves with a `requires_manual_step` flag in their frontmatter (for `.sh` files) or top-level key (for `.yaml`/`.ts`). The updater stops at such migrations, surfaces "this update needs a manual step" in the UI with the exact command to run, and resumes after the user confirms via the UI or SSH. Releases that contain such migrations are flagged in the release listing.

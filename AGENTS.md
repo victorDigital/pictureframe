@@ -51,7 +51,7 @@ These were paid for in bugs and shouldn't be undone:
   migration files at numbers ≤ the highest previously-applied number and
   aborts with `migration_history_diverged` on mismatch. Don't loosen this.
 - **Sudoers is narrow.** `frame` user can only restart its two services
-  and `/sbin/reboot`. Brightness goes through a udev rule, not sudo
+  and `systemctl reboot`. Brightness goes through a udev rule, not sudo
   (§10 — the old sudoers-wildcard design was a sandbox escape).
 - **manual_next semantics.** A `manual_next` claim is popped on the
   arrival of *any* non-manual-next claim, regardless of resolved

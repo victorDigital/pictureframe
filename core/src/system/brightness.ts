@@ -69,7 +69,13 @@ export class Brightness {
 
   async scheduleReboot(): Promise<{ ok: true }> {
     log.warn("reboot requested via API");
-    setTimeout(() => exec("sudo", ["/sbin/reboot"]).catch(() => {}), 500);
+    setTimeout(
+      () =>
+        exec("sudo", ["-n", "/usr/bin/systemctl", "reboot"]).catch((err) => {
+          log.error({ err: String(err) }, "reboot command failed");
+        }),
+      500,
+    );
     return { ok: true };
   }
 

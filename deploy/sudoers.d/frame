@@ -4,4 +4,4 @@
 # Wildcards are deliberately avoided.
 frame ALL=(root) NOPASSWD: /usr/bin/systemctl restart frame-core, \
                             /usr/bin/systemctl restart frame-kiosk, \
-                            /sbin/reboot
+                            /usr/bin/systemctl reboot
