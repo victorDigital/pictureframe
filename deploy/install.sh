@@ -160,11 +160,23 @@ if ! command -v node >/dev/null 2>&1 || [[ "$(node -v 2>/dev/null | sed -E 's/v(
 fi
 
 ###############################################################################
-# 4. Disable apt-daily timers (boot speed; OS updates manual)
+# 4. Disable boot-speed killers (apt-daily; NetworkManager-wait-online)
 ###############################################################################
 
 log "Disabling apt-daily timers"
 systemctl disable --now apt-daily.timer apt-daily-upgrade.timer 2>/dev/null || true
+
+# NetworkManager-wait-online has a 90 s default timeout. Boot hangs there
+# while NM probes interfaces, even though frame-core only binds to 0.0.0.0
+# and doesn't need a fully-online network to start. Mask it so nothing in
+# network-online.target keeps boot waiting.
+if systemctl cat NetworkManager-wait-online.service >/dev/null 2>&1; then
+  log "Masking NetworkManager-wait-online.service (skip 90s boot wait)"
+  systemctl mask NetworkManager-wait-online.service >/dev/null 2>&1 || true
+fi
+if systemctl cat systemd-networkd-wait-online.service >/dev/null 2>&1; then
+  systemctl mask systemd-networkd-wait-online.service >/dev/null 2>&1 || true
+fi
 
 ###############################################################################
 # 5. Verify time sync
