@@ -130,6 +130,7 @@ log "Updating apt indexes"
 apt-get update -qq
 
 BASE_PACKAGES=(
+  sudo
   wayvnc
   chromium
   curl
