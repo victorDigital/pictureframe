@@ -293,9 +293,12 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
     }
   });
 
-  app.get<{ Querystring: { lines?: number; subsystem?: string } }>("/api/logs", async (req) => {
-    return deps.updater.tailLog(req.query.lines ?? 200, req.query.subsystem);
-  });
+  app.get<{ Querystring: { lines?: number; subsystem?: string; unit?: string } }>(
+    "/api/logs",
+    async (req) => {
+      return deps.updater.tailLog(req.query.lines ?? 200, req.query.subsystem, req.query.unit);
+    },
+  );
 
   // ---- rules ----------------------------------------------------------------
 
