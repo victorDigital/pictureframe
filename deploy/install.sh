@@ -211,7 +211,9 @@ install -d -o frame -g frame -m 0755 /opt/frame/shared/data
 install -d -o frame -g frame -m 0755 /opt/frame/snapshots
 install -d -o frame -g frame -m 0755 /opt/frame/state
 install -d -o frame -g frame -m 0755 /opt/frame/staging
-install -d -o root  -g frame -m 0750 /etc/frame
+# Group-writable so frame-core can atomically update its yaml files
+# (screens.yaml / rules.yaml / frame.yaml) via tempfile-and-rename.
+install -d -o root  -g frame -m 2770 /etc/frame
 install -d -o root  -g frame -m 0750 /etc/frame/secrets
 
 # Runtime dir for CDP socket + pid files.
@@ -303,12 +305,21 @@ fi
 
 if [[ ! -f /etc/frame/frame.yaml ]]; then
   log "Installing example frame.yaml"
-  install -m 0640 -o root -g frame "$(dirname "$0")/../config.example.yaml" /etc/frame/frame.yaml
+  install -m 0660 -o root -g frame "$(dirname "$0")/../config.example.yaml" /etc/frame/frame.yaml
 fi
 if [[ ! -f /etc/frame/screens.yaml ]]; then
   log "Installing example screens.yaml"
-  install -m 0640 -o root -g frame "$(dirname "$0")/../screens.example.yaml" /etc/frame/screens.yaml
+  install -m 0660 -o root -g frame "$(dirname "$0")/../screens.example.yaml" /etc/frame/screens.yaml
 fi
+
+# Repair perms on an existing install in case earlier versions wrote them
+# read-only for the group (frame-core couldn't atomically update them).
+chmod 2770 /etc/frame 2>/dev/null || true
+[[ -f /etc/frame/frame.yaml   ]] && chmod 0660 /etc/frame/frame.yaml   || true
+[[ -f /etc/frame/screens.yaml ]] && chmod 0660 /etc/frame/screens.yaml || true
+[[ -f /etc/frame/rules.yaml   ]] && chmod 0660 /etc/frame/rules.yaml   || true
+chgrp -R frame /etc/frame 2>/dev/null || true
+chmod 0750 /etc/frame/secrets 2>/dev/null || true
 
 generate_secret() { head -c 32 /dev/urandom | base64 | tr -d '/+=' | head -c 32; }
 

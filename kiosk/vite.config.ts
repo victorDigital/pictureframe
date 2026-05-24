@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   root: ".",
+  base: "/shell/",
   build: {
     outDir: "dist",
     emptyOutDir: true,
