@@ -28,8 +28,12 @@ LimitNOFILE=8192
 RuntimeDirectory=frame
 RuntimeDirectoryMode=0755
 
-# Hardening (the Wayland session lives in frame-kiosk; core only needs files + net)
-NoNewPrivileges=true
+# Hardening (the Wayland session lives in frame-kiosk; core only needs files + net).
+# NoNewPrivileges is intentionally OFF: frame-core invokes sudo for the narrow
+# allowlist in /etc/sudoers.d/frame (systemctl restart frame-core/kiosk and
+# systemctl reboot), and the terminal-in-browser feature spawns a bash that
+# also needs to exec those sudo commands. NoNewPrivileges blocks all setuid
+# (sudo can't elevate), which broke reboot from both the web UI and terminal.
 ProtectSystem=full
 ProtectHome=read-only
 ReadWritePaths=/opt/frame /etc/frame /var/log
