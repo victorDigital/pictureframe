@@ -2,55 +2,299 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Clock</title>
+    <link rel="stylesheet" href="/builtin/_shared/style.css" />
     <style>
-      :root { color-scheme: dark; }
-      html, body { margin: 0; height: 100%; background: var(--bg, #000); color: var(--fg, #f5f5f5); font-family: ui-sans-serif, system-ui, sans-serif; }
-      body { display: grid; place-items: center; }
-      .face { text-align: center; }
-      .time { font-size: clamp(8rem, 22vw, 28rem); font-variant-numeric: tabular-nums; letter-spacing: -0.04em; line-height: 0.9; font-weight: 200; }
-      .seconds { font-size: 0.4em; opacity: 0.6; margin-left: 0.2em; }
-      .date { font-size: clamp(1.5rem, 3vw, 3rem); opacity: 0.8; margin-top: 1rem; letter-spacing: 0.02em; }
-      .warn { position: fixed; top: 1rem; right: 1rem; font-size: 0.9rem; opacity: 0.8; background: rgba(255, 80, 80, 0.85); padding: 0.4rem 0.8rem; border-radius: 0.4rem; display: none; }
-      .warn[data-show="true"] { display: block; }
+      .flip-digit {
+        perspective: 12rem;
+      }
+      .flip-card {
+        position: relative;
+        width: 1.1em;
+        height: 1.45em;
+        border-radius: 0.18em;
+        background: var(--card);
+        color: var(--card-foreground);
+        border: 1px solid var(--border);
+        box-shadow: 0 0.35em 1.2em oklch(0 0 0 / 18%);
+        overflow: hidden;
+      }
+      .flip-card::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 50%;
+        height: 1px;
+        background: var(--border);
+        opacity: 0.85;
+        z-index: 2;
+      }
+      .flip-card span {
+        display: grid;
+        place-items: center;
+        width: 100%;
+        height: 100%;
+        font-variant-numeric: tabular-nums;
+      }
+      .flip-card[data-flip="true"] span {
+        animation: flip-tick 0.35s ease-out;
+      }
+      @keyframes flip-tick {
+        0% { transform: rotateX(-70deg); opacity: 0.35; }
+        100% { transform: rotateX(0deg); opacity: 1; }
+      }
+      .analog-face {
+        width: min(72vmin, calc(42rem * var(--font-scale, 1)));
+        height: min(72vmin, calc(42rem * var(--font-scale, 1)));
+      }
+      .analog-hand {
+        transform-origin: 50% 100%;
+        transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .analog-hand-second {
+        transition: none;
+      }
     </style>
   </head>
-  <body>
-    <div class="face">
-      <div class="time"><span id="hm">--:--</span><span id="sec" class="seconds"></span></div>
-      <div id="date" class="date"></div>
+  <body class="screen-root">
+    <main id="face" class="flex flex-col items-center justify-center gap-6 w-full h-full p-8"></main>
+    <div
+      id="warn"
+      class="fixed top-4 right-4 z-50 hidden rounded-lg border border-destructive/30 bg-destructive px-4 py-2 text-sm text-primary-foreground shadow-lg"
+      role="status"
+    >
+      Clock not synced
     </div>
-    <div id="warn" class="warn">Clock not synced</div>
-    <script>
-      const params = new URLSearchParams(location.search);
-      let config = {};
-      try { config = JSON.parse(params.get("config") || "{}"); } catch (e) {}
-      if (config.color) document.body.style.setProperty("--fg", config.color);
-      if (config.background) document.body.style.setProperty("--bg", config.background);
 
-      const hm = document.getElementById("hm");
-      const sec = document.getElementById("sec");
-      const date = document.getElementById("date");
-      const warn = document.getElementById("warn");
+    <script type="module">
+      import { init, formatDate } from "/builtin/_shared/runtime.js";
+
+      const config = init("clock");
+
+      if (config.color) document.documentElement.style.setProperty("--foreground", config.color);
+      if (config.background) document.documentElement.style.setProperty("--background", config.background);
+
+      const WEIGHT = {
+        thin: "font-thin",
+        light: "font-light",
+        normal: "font-normal",
+        medium: "font-medium",
+        semibold: "font-semibold",
+        bold: "font-bold",
+      };
+      const weightClass = WEIGHT[config.font_weight] ?? WEIGHT.light;
+
+      const faceEl = document.getElementById("face");
+      const warnEl = document.getElementById("warn");
+      const face = config.face ?? "minimal";
+      const showSeconds = config.show_seconds === true;
+      const showDate = config.show_date !== false;
+
+      function uses12Hour() {
+        if (config.time_format === "12h") return true;
+        if (config.time_format === "24h") return false;
+        return Intl.DateTimeFormat(undefined, { hour: "numeric" }).resolvedOptions().hour12;
+      }
+
+      function timeParts(date) {
+        const twelve = uses12Hour();
+        let h = date.getHours();
+        const period = twelve ? (h >= 12 ? "PM" : "AM") : "";
+        if (twelve) h = h % 12 || 12;
+        const hh = String(h).padStart(2, "0");
+        const mm = String(date.getMinutes()).padStart(2, "0");
+        const ss = String(date.getSeconds()).padStart(2, "0");
+        return { hh, mm, ss, period };
+      }
+
+      function dateText(date) {
+        if (!showDate) return "";
+        return formatDate(date, config.date_format ?? "long");
+      }
+
+      function checkSync(date) {
+        if (date.getFullYear() < 2020) warnEl.classList.remove("hidden");
+        else warnEl.classList.add("hidden");
+      }
+
+      function renderDigital() {
+        faceEl.innerHTML =
+          '<div class="flex flex-col items-center text-center gap-4">' +
+            '<div id="time" class="text-display tabular ' + weightClass + ' text-foreground"></div>' +
+            (showDate ? '<div id="date" class="text-title-sm text-muted-foreground"></div>' : "") +
+          "</div>";
+        return {
+          tick(date) {
+            const { hh, mm, ss, period } = timeParts(date);
+            let text = hh + '<span class="text-primary opacity-80">:</span>' + mm;
+            if (showSeconds) {
+              text += '<span class="text-primary opacity-80">:</span>' + ss;
+            }
+            if (period) {
+              text += '<span class="text-title-md text-muted-foreground ml-4 align-middle">' + period + "</span>";
+            }
+            document.getElementById("time").innerHTML = text;
+            if (showDate) document.getElementById("date").textContent = dateText(date);
+          },
+        };
+      }
+
+      function renderMinimal() {
+        faceEl.innerHTML =
+          '<div class="flex flex-col items-center text-center gap-3">' +
+            '<div id="time" class="text-title-xl tabular tracking-tight ' + weightClass + ' text-foreground"></div>' +
+            (showDate ? '<div id="date" class="text-caption uppercase tracking-widest"></div>' : "") +
+          "</div>";
+        return {
+          tick(date) {
+            const { hh, mm, period } = timeParts(date);
+            let text = hh + "<span class='opacity-40'>:</span>" + mm;
+            if (period) text += " <span class='text-muted-foreground text-title-sm'>" + period + "</span>";
+            document.getElementById("time").innerHTML = text;
+            if (showDate) document.getElementById("date").textContent = dateText(date);
+          },
+        };
+      }
+
+      function renderFlip() {
+        faceEl.innerHTML =
+          '<div class="flex flex-col items-center text-center gap-6">' +
+            '<div id="flip-row" class="flex flex-row flex-wrap items-center justify-center gap-2 text-title-xl ' +
+              weightClass + '"></div>' +
+            (showDate ? '<div id="date" class="text-title-sm text-muted-foreground"></div>' : "") +
+          "</div>";
+        const row = document.getElementById("flip-row");
+        let prev = "";
+
+        function flipChar(ch) {
+          const wrap = document.createElement("div");
+          if (ch === ":") {
+            wrap.className = "flex items-center justify-center px-1 text-primary opacity-70";
+            wrap.textContent = ":";
+            return wrap;
+          }
+          if (ch === " ") {
+            wrap.className = "w-2";
+            return wrap;
+          }
+          wrap.className = "flip-digit";
+          const card = document.createElement("div");
+          card.className = "flip-card";
+          const span = document.createElement("span");
+          span.textContent = ch;
+          card.appendChild(span);
+          wrap.appendChild(card);
+          return wrap;
+        }
+
+        function buildRow(str) {
+          row.replaceChildren();
+          [...str].forEach((ch) => row.appendChild(flipChar(ch)));
+        }
+
+        return {
+          tick(date) {
+            const { hh, mm, ss, period } = timeParts(date);
+            let str = hh + ":" + mm;
+            if (showSeconds) str += ":" + ss;
+            if (period) str += " " + period;
+            if (prev === "" || row.childElementCount !== str.length) {
+              buildRow(str);
+            } else if (str !== prev) {
+              const cards = row.querySelectorAll(".flip-card span");
+              [...str].forEach((ch, i) => {
+                const card = cards[i]?.parentElement;
+                const span = cards[i];
+                if (!span || !card || ch === ":" || ch === " ") return;
+                if (span.textContent !== ch) {
+                  span.textContent = ch;
+                  card.dataset.flip = "true";
+                  card.addEventListener(
+                    "animationend",
+                    () => {
+                      card.dataset.flip = "false";
+                    },
+                    { once: true },
+                  );
+                }
+              });
+            }
+            prev = str;
+            if (showDate) document.getElementById("date").textContent = dateText(date);
+          },
+        };
+      }
+
+      function renderAnalog() {
+        faceEl.innerHTML =
+          '<div class="flex flex-col items-center text-center gap-6">' +
+            '<svg class="analog-face" viewBox="0 0 200 200" aria-hidden="true">' +
+              '<circle cx="100" cy="100" r="96" fill="var(--card)" stroke="var(--border)" stroke-width="2"/>' +
+              '<g id="ticks" stroke="var(--muted-foreground)" stroke-width="1.5" stroke-linecap="round"></g>' +
+              '<line id="hour-hand" class="analog-hand" x1="100" y1="100" x2="100" y2="58" ' +
+                'stroke="var(--foreground)" stroke-width="4" stroke-linecap="round"/>' +
+              '<line id="minute-hand" class="analog-hand" x1="100" y1="100" x2="100" y2="38" ' +
+                'stroke="var(--foreground)" stroke-width="3" stroke-linecap="round"/>' +
+              (showSeconds
+                ? '<line id="second-hand" class="analog-hand analog-hand-second" x1="100" y1="108" x2="100" y2="28" ' +
+                    'stroke="var(--primary)" stroke-width="1.5" stroke-linecap="round"/>'
+                : "") +
+              '<circle cx="100" cy="100" r="4" fill="var(--primary)"/>' +
+            "</svg>" +
+            (showDate ? '<div id="date" class="text-title-sm text-muted-foreground"></div>' : "") +
+          "</div>";
+
+        const ticks = document.getElementById("ticks");
+        for (let i = 0; i < 60; i++) {
+          const major = i % 5 === 0;
+          const len = major ? 10 : 5;
+          const inner = 96 - len;
+          const rad = ((i * 6 - 90) * Math.PI) / 180;
+          const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          line.setAttribute("x1", String(100 + inner * Math.cos(rad)));
+          line.setAttribute("y1", String(100 + inner * Math.sin(rad)));
+          line.setAttribute("x2", String(100 + 96 * Math.cos(rad)));
+          line.setAttribute("y2", String(100 + 96 * Math.sin(rad)));
+          line.setAttribute("stroke-width", major ? "2" : "1");
+          line.setAttribute("opacity", major ? "0.9" : "0.35");
+          ticks.appendChild(line);
+        }
+
+        const hourHand = document.getElementById("hour-hand");
+        const minuteHand = document.getElementById("minute-hand");
+        const secondHand = showSeconds ? document.getElementById("second-hand") : null;
+
+        return {
+          tick(date) {
+            const s = date.getSeconds();
+            const m = date.getMinutes();
+            const h = date.getHours() % 12;
+            hourHand.setAttribute("transform", "rotate(" + (h * 30 + m * 0.5) + " 100 100)");
+            minuteHand.setAttribute("transform", "rotate(" + (m * 6 + s * 0.1) + " 100 100)");
+            if (secondHand) secondHand.setAttribute("transform", "rotate(" + (s * 6) + " 100 100)");
+            if (showDate) document.getElementById("date").textContent = dateText(date);
+          },
+        };
+      }
+
+      const renderers = {
+        digital: renderDigital,
+        analog: renderAnalog,
+        minimal: renderMinimal,
+        flip: renderFlip,
+      };
+      const renderer = (renderers[face] ?? renderMinimal)();
 
       function tick() {
         const now = new Date();
-        const hours = String(now.getHours()).padStart(2, "0");
-        const minutes = String(now.getMinutes()).padStart(2, "0");
-        hm.textContent = `${hours}:${minutes}`;
-        if (config.show_seconds) {
-          sec.textContent = ":" + String(now.getSeconds()).padStart(2, "0");
-        }
-        if (config.show_date !== false) {
-          date.textContent = now.toLocaleDateString(undefined, {
-            weekday: "long", month: "long", day: "numeric"
-          });
-        }
-        if (now.getFullYear() < 2020) warn.dataset.show = "true";
+        renderer.tick(now);
+        checkSync(now);
       }
+
       tick();
       setInterval(tick, 1000);
-      parent.postMessage({ type: "builtin_ready", id: "clock" }, "*");
     </script>
   </body>
 </html>

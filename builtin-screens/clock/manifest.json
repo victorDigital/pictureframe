@@ -1,19 +1,81 @@
 {
   "id": "clock",
   "name": "Clock",
-  "description": "Large clock with date. Configurable face.",
+  "description": "Full-screen clock with digital, analog, minimal, and flip faces. Uses device time — no network required.",
   "config_schema": {
     "type": "object",
     "properties": {
+      "theme": {
+        "type": "string",
+        "enum": ["auto", "light", "dark", "midnight"],
+        "default": "auto",
+        "description": "Color scheme. Auto follows the device/OS preference."
+      },
+      "font_scale": {
+        "type": "number",
+        "minimum": 0.5,
+        "maximum": 2,
+        "format": "range",
+        "default": 1,
+        "description": "Scale all typography (0.5×–2×)."
+      },
+      "font_family": {
+        "type": "string",
+        "enum": ["geist", "system", "serif", "mono"],
+        "default": "geist",
+        "description": "Typeface for time and date."
+      },
       "face": {
         "type": "string",
-        "enum": ["digital", "analog", "minimal"],
-        "default": "minimal"
+        "enum": ["digital", "analog", "minimal", "flip"],
+        "default": "minimal",
+        "description": "Clock presentation style."
       },
-      "show_seconds": { "type": "boolean", "default": false },
-      "show_date": { "type": "boolean", "default": true },
-      "color": { "type": "string", "default": "#f5f5f5" },
-      "background": { "type": "string", "default": "#000" }
+      "time_format": {
+        "type": "string",
+        "enum": ["auto", "12h", "24h"],
+        "default": "auto",
+        "description": "12- or 24-hour time. Auto uses locale default."
+      },
+      "show_seconds": {
+        "type": "boolean",
+        "default": false,
+        "description": "Show seconds (digital, minimal, flip, and analog second hand)."
+      },
+      "show_date": {
+        "type": "boolean",
+        "default": true,
+        "description": "Show the date below the clock."
+      },
+      "date_format": {
+        "type": "string",
+        "enum": ["long", "medium", "short", "weekday", "iso"],
+        "default": "long",
+        "description": "Date string style."
+      },
+      "font_weight": {
+        "type": "string",
+        "enum": ["thin", "light", "normal", "medium", "semibold", "bold"],
+        "default": "light",
+        "description": "Weight of the primary time display."
+      },
+      "accent_color": {
+        "type": "string",
+        "format": "color",
+        "description": "Accent color for hands, separators, and highlights. Leave empty for theme default."
+      },
+      "color": {
+        "type": "string",
+        "format": "color",
+        "default": "",
+        "description": "Override text color (legacy). Leave empty to use the theme foreground."
+      },
+      "background": {
+        "type": "string",
+        "format": "color",
+        "default": "",
+        "description": "Override background color (legacy). Leave empty to use the theme background."
+      }
     }
   }
 }
