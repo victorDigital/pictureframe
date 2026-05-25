@@ -1,14 +1,65 @@
 {
   "id": "transit",
   "name": "Transit",
-  "description": "Next departures from configured stops. Transit APIs are heterogeneous, so this screen consumes a generic JSON feed your reverse proxy / glue script produces: { stops: [{ name, departures: [{ when, line, destination, minutes? }] }] }. Wire that to Resrobot, MBTA, Rejseplanen, etc.",
+  "description": "Next departures from configured stops. Transit APIs are heterogeneous, so this screen consumes a generic JSON feed your reverse proxy / glue script produces: { stops: [{ name, departures: [{ when, line, destination, minutes?, status? }] }] }. Optional status per departure: on_time, late, or cancelled. Wire that to Resrobot, MBTA, Rejseplanen, etc.",
   "config_schema": {
     "type": "object",
     "required": ["feed_url"],
     "properties": {
       "feed_url": { "type": "string", "description": "URL returning the JSON shape described above" },
       "refresh_sec": { "type": "integer", "minimum": 15, "default": 60 },
-      "max_per_stop": { "type": "integer", "minimum": 1, "maximum": 12, "default": 4 }
+      "max_per_stop": { "type": "integer", "minimum": 1, "maximum": 12, "default": 4 },
+      "theme": {
+        "type": "string",
+        "enum": ["auto", "light", "dark", "midnight"],
+        "default": "auto",
+        "description": "Color palette"
+      },
+      "font_scale": {
+        "type": "number",
+        "minimum": 0.5,
+        "maximum": 2,
+        "default": 1,
+        "format": "range",
+        "description": "Scale all text sizes"
+      },
+      "font_family": {
+        "type": "string",
+        "enum": ["geist", "system", "serif", "mono"],
+        "default": "geist",
+        "description": "Typeface"
+      },
+      "accent_color": {
+        "type": "string",
+        "format": "color",
+        "description": "Line badge accent (defaults to theme primary)"
+      },
+      "line_badge_style": {
+        "type": "string",
+        "enum": ["filled", "outline", "pill", "square", "minimal"],
+        "default": "filled",
+        "description": "How route/line numbers are displayed"
+      },
+      "compact_mode": {
+        "type": "boolean",
+        "default": false,
+        "description": "Tighter row spacing for many departures"
+      },
+      "on_time_color": {
+        "type": "string",
+        "format": "color",
+        "description": "Departure time when on schedule"
+      },
+      "late_color": {
+        "type": "string",
+        "format": "color",
+        "description": "Late or delayed departures"
+      },
+      "cancelled_color": {
+        "type": "string",
+        "format": "color",
+        "description": "Cancelled departures"
+      }
     }
   }
 }
