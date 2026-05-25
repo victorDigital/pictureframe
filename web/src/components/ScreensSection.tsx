@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -52,6 +53,7 @@ type PropSchema = {
   description?: string;
   minimum?: number;
   maximum?: number;
+  format?: string;
   items?: PropSchema & { required?: string[]; properties?: Record<string, PropSchema> };
   properties?: Record<string, PropSchema>;
   required?: string[];
@@ -103,6 +105,11 @@ function validateConfig(
       }
       if (prop.maximum !== undefined && v > prop.maximum) {
         errors.push(`"${key}" must be ≤ ${prop.maximum}`);
+      }
+    }
+    if (prop.format === "color" && typeof v === "string" && v.trim() !== "") {
+      if (!/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(v)) {
+        errors.push(`"${key}" must be a hex color like #4f8cff`);
       }
     }
   }
@@ -473,6 +480,33 @@ function ScreenEditor({
       );
     }
 
+    if (
+      (schema.type === "integer" || schema.type === "number") &&
+      schema.format === "range" &&
+      schema.minimum !== undefined &&
+      schema.maximum !== undefined
+    ) {
+      const step = schema.type === "integer" ? 1 : (schema.maximum - schema.minimum) / 100;
+      const current = typeof value === "number" ? value : schema.minimum;
+      return (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">
+              {schema.minimum} – {schema.maximum}
+            </span>
+            <span className="font-mono tabular-nums">{current}</span>
+          </div>
+          <Slider
+            min={schema.minimum}
+            max={schema.maximum}
+            step={step}
+            value={[current]}
+            onValueChange={(v) => updateConfig(key, v[0])}
+          />
+        </div>
+      );
+    }
+
     if (schema.type === "integer" || schema.type === "number") {
       return (
         <Input
@@ -484,6 +518,27 @@ function ScreenEditor({
             updateConfig(key, e.target.value === "" ? undefined : Number(e.target.value))
           }
         />
+      );
+    }
+
+    if (schema.format === "color" && (schema.type === "string" || schema.type === undefined)) {
+      const hex = typeof value === "string" && value ? value : "#000000";
+      return (
+        <div className="flex items-center gap-2">
+          <input
+            type="color"
+            value={hex}
+            onChange={(e) => updateConfig(key, e.target.value)}
+            className="h-7 w-12 cursor-pointer rounded-md border border-input bg-input/20 p-0.5"
+          />
+          <Input
+            type="text"
+            value={(value as string) ?? ""}
+            placeholder="#4f8cff"
+            onChange={(e) => updateConfig(key, e.target.value || undefined)}
+            className="font-mono"
+          />
+        </div>
       );
     }
 
