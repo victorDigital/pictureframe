@@ -1,12 +1,64 @@
 {
   "id": "ambient",
   "name": "Ambient",
-  "description": "Slow generative visuals for late evening — pure CSS/Canvas, no network. Three palettes selectable.",
+  "description": "Slow generative canvas visuals for late evening — pure CSS/Canvas, no network. Six palettes, optional clock overlay.",
   "config_schema": {
     "type": "object",
     "properties": {
-      "palette": { "type": "string", "enum": ["midnight", "embers", "aurora"], "default": "midnight" },
-      "show_clock": { "type": "boolean", "default": true }
+      "theme": {
+        "type": "string",
+        "enum": ["auto", "light", "dark", "midnight"],
+        "default": "midnight",
+        "description": "Color scheme. Midnight is recommended for dim rooms."
+      },
+      "font_scale": {
+        "type": "number",
+        "minimum": 0.5,
+        "maximum": 2,
+        "format": "range",
+        "default": 1,
+        "description": "Scale the clock overlay typography (0.5×–2×)."
+      },
+      "font_family": {
+        "type": "string",
+        "enum": ["geist", "system", "serif", "mono"],
+        "default": "geist",
+        "description": "Typeface for the optional clock overlay."
+      },
+      "accent_color": {
+        "type": "string",
+        "format": "color",
+        "description": "Tint the brightest blob layer. Leave empty to use the palette default."
+      },
+      "palette": {
+        "type": "string",
+        "enum": ["midnight", "embers", "aurora", "ocean", "forest", "mono"],
+        "default": "midnight",
+        "description": "Generative color palette for the canvas blobs."
+      },
+      "motion_speed": {
+        "type": "string",
+        "enum": ["slow", "normal", "fast"],
+        "default": "slow",
+        "description": "How quickly the blobs drift across the screen."
+      },
+      "density": {
+        "type": "string",
+        "enum": ["sparse", "normal", "dense"],
+        "default": "normal",
+        "description": "Number of blobs on screen."
+      },
+      "show_clock": {
+        "type": "boolean",
+        "default": true,
+        "description": "Show a centered HH:MM clock overlay."
+      },
+      "clock_style": {
+        "type": "string",
+        "enum": ["minimal", "soft", "bold", "ghost"],
+        "default": "minimal",
+        "description": "Visual style of the clock overlay when show_clock is enabled."
+      }
     }
   }
 }
