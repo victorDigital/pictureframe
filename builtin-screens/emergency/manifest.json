@@ -1,6 +1,40 @@
 {
   "id": "emergency",
   "name": "Configuration error (safe mode)",
-  "description": "Shown when frame.yaml or screens.yaml fail validation.",
-  "config_schema": { "type": "object", "properties": {} }
+  "description": "Shown when frame.yaml or screens.yaml fail validation. Displays safe-mode status from the device API and structured validation errors when available.",
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "theme": {
+        "type": "string",
+        "enum": ["auto", "light", "dark", "midnight"],
+        "default": "auto",
+        "description": "Color scheme. Auto follows the device/OS preference."
+      },
+      "font_scale": {
+        "type": "number",
+        "minimum": 0.5,
+        "maximum": 2,
+        "format": "range",
+        "default": 1,
+        "description": "Scale all typography (0.5×–2×)."
+      },
+      "font_family": {
+        "type": "string",
+        "enum": ["geist", "system", "serif", "mono"],
+        "default": "geist",
+        "description": "Typeface for headings and body copy."
+      },
+      "accent_color": {
+        "type": "string",
+        "format": "color",
+        "description": "Accent for the alert icon and emphasis. Leave empty for theme destructive color."
+      },
+      "show_validation_details": {
+        "type": "boolean",
+        "default": true,
+        "description": "Show structured validation error details (field paths and messages) when available."
+      }
+    }
+  }
 }

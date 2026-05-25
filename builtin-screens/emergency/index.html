@@ -2,34 +2,202 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Configuration error</title>
-    <style>
-      :root { color-scheme: dark; }
-      html, body { margin: 0; height: 100%; background: #1a0808; color: #ffdada; font-family: ui-monospace, "JetBrains Mono", monospace; }
-      body { display: grid; place-items: center; padding: 2rem; }
-      .panel { max-width: 60rem; }
-      h1 { color: #ff6f6f; font-size: clamp(2rem, 4vw, 3.5rem); margin: 0 0 1rem; }
-      p { line-height: 1.4; margin: 0.5rem 0; opacity: 0.85; }
-      .reason { background: rgba(255, 80, 80, 0.1); padding: 1rem; border-left: 4px solid #ff6f6f; margin-top: 1.5rem; white-space: pre-wrap; }
-      code { background: rgba(255, 255, 255, 0.08); padding: 0.1rem 0.3rem; border-radius: 0.2rem; }
-    </style>
+    <link rel="stylesheet" href="/builtin/_shared/style.css" />
   </head>
-  <body>
-    <div class="panel">
-      <h1>Configuration error</h1>
-      <p>The frame is running in <strong>safe mode</strong> because <code>frame.yaml</code> or
-        <code>screens.yaml</code> failed validation.</p>
-      <p>The web UI on this device is still reachable. SSH in and check
-        <code>journalctl -u frame-core</code> for details, or use the validation
-        view in <em>Settings → Configuration</em>.</p>
-      <div id="reason" class="reason">Loading reason…</div>
-    </div>
-    <script>
-      fetch("/healthz").then(r => r.json()).then(b => {
-        document.getElementById("reason").textContent =
-          `safe_mode=${b.safe_mode}\nversion=${b.version}`;
-      }).catch(() => {});
-      parent.postMessage({ type: "builtin_ready", id: "emergency" }, "*");
+  <body class="screen-root overflow-y-auto">
+    <main
+      class="flex w-full max-w-4xl flex-col gap-8 px-8 py-10 sm:px-12"
+      role="alert"
+      aria-live="polite"
+    >
+      <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
+        <div
+          id="icon"
+          class="flex size-16 shrink-0 items-center justify-center rounded-2xl border border-destructive/30 bg-destructive/10 text-destructive shadow-sm"
+          aria-hidden="true"
+        >
+          <svg
+            class="size-9"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.75"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M12 9v4" />
+            <path d="M12 17h.01" />
+            <path
+              d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+            />
+          </svg>
+        </div>
+        <div class="flex min-w-0 flex-1 flex-col gap-2">
+          <p class="text-eyebrow text-destructive">Safe mode</p>
+          <h1 class="text-title-lg font-semibold tracking-tight text-foreground">
+            Configuration error
+          </h1>
+          <p class="text-body text-muted-foreground max-w-2xl text-pretty">
+            The frame is running in <strong class="font-medium text-foreground">safe mode</strong>
+            because <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-sm">frame.yaml</code>
+            or
+            <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-sm">screens.yaml</code>
+            failed validation. The web UI on this device is still reachable; fix the config files
+            and restart frame-core, or use the validation view in
+            <em class="text-foreground/90">Settings → Configuration</em>.
+          </p>
+        </div>
+      </header>
+
+      <section
+        class="rounded-xl border border-destructive/30 bg-card/80 p-5 shadow-md backdrop-blur-sm"
+      >
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <span class="text-title-sm font-medium text-foreground">Failure reason</span>
+          <code
+            id="reason"
+            class="inline-flex max-w-full items-center rounded-lg bg-muted px-3 py-1.5 font-mono text-sm text-foreground tabular-nums"
+            >loading…</code
+          >
+        </div>
+
+        <div id="details-section" class="mt-5 flex flex-col gap-2">
+          <span class="text-eyebrow">Validation details</span>
+          <div id="details" class="min-h-0" hidden></div>
+          <p id="details-hint" class="text-caption hidden">
+            Open the admin UI <em>Now</em> tab while signed in for the full validation report, or
+            check <code class="font-mono">journalctl -u frame-core</code>.
+          </p>
+        </div>
+      </section>
+
+      <section
+        class="grid gap-4 rounded-xl border border-border/60 bg-muted/20 p-5 sm:grid-cols-2"
+      >
+        <div class="flex flex-col gap-1">
+          <span class="text-eyebrow">Frame version</span>
+          <span id="version" class="text-title-sm tabular text-foreground">—</span>
+        </div>
+        <div class="flex flex-col gap-1">
+          <span class="text-eyebrow">Safe mode</span>
+          <span id="safe-flag" class="text-title-sm tabular text-foreground">—</span>
+        </div>
+      </section>
+
+      <section class="text-body text-muted-foreground flex flex-col gap-3 border-t border-border/50 pt-6">
+        <p class="text-eyebrow text-foreground/80">How to recover</p>
+        <ol class="list-decimal space-y-2 pl-5 marker:text-muted-foreground">
+          <li>SSH to the device or open the LAN web UI and sign in.</li>
+          <li>
+            Inspect
+            <code class="rounded bg-muted px-1 font-mono text-sm">/etc/frame/frame.yaml</code> and
+            <code class="rounded bg-muted px-1 font-mono text-sm">screens.yaml</code> (path from
+            <code class="font-mono text-sm">screens_file</code>).
+          </li>
+          <li>
+            Run
+            <code class="font-mono text-sm">journalctl -u frame-core -n 80</code> for the boot-time
+            validation log.
+          </li>
+          <li>Save valid YAML and restart: <code class="font-mono text-sm">systemctl restart frame-core</code>.</li>
+        </ol>
+      </section>
+    </main>
+
+    <script type="module">
+      import { init } from "/builtin/_shared/runtime.js";
+      import {
+        hasStructuredDetails,
+        renderValidationDetails,
+      } from "/builtin/emergency/assets/validation.js";
+
+      const config = init("emergency");
+
+      const reasonEl = document.getElementById("reason");
+      const detailsEl = document.getElementById("details");
+      const detailsSection = document.getElementById("details-section");
+      const detailsHint = document.getElementById("details-hint");
+      const versionEl = document.getElementById("version");
+      const safeFlagEl = document.getElementById("safe-flag");
+      const iconEl = document.getElementById("icon");
+
+      if (config.accent_color) {
+        iconEl.classList.remove("text-destructive", "border-destructive/30", "bg-destructive/10");
+        iconEl.classList.add("text-primary", "border-primary/30", "bg-primary/10");
+      }
+
+      const showDetails = config.show_validation_details !== false;
+
+      function setReason(text) {
+        reasonEl.textContent = text || "unknown";
+      }
+
+      function applySafeModeInfo(info) {
+        if (!info) return;
+        if (info.reason) setReason(info.reason);
+        if (!showDetails) {
+          detailsSection.hidden = true;
+          return;
+        }
+        if (hasStructuredDetails(info.details)) {
+          renderValidationDetails(detailsEl, info.details);
+          detailsHint.classList.add("hidden");
+        } else if (info.details != null) {
+          renderValidationDetails(detailsEl, info.details);
+          detailsHint.classList.add("hidden");
+        } else {
+          detailsEl.hidden = true;
+          detailsHint.classList.remove("hidden");
+        }
+      }
+
+      async function loadHealth() {
+        try {
+          const res = await fetch("/healthz");
+          if (!res.ok) return;
+          const body = await res.json();
+          versionEl.textContent = body.version ?? "—";
+          safeFlagEl.textContent = body.safe_mode ? "active" : "off";
+          if (body.safe_mode && reasonEl.textContent === "loading…") {
+            setReason("safe_mode_active");
+          }
+        } catch {
+          versionEl.textContent = "unreachable";
+          safeFlagEl.textContent = "—";
+        }
+      }
+
+      async function loadState() {
+        try {
+          const res = await fetch("/api/state");
+          if (!res.ok) {
+            if (config.reason) setReason(config.reason);
+            if (showDetails && config.details != null) {
+              applySafeModeInfo({ reason: config.reason, details: config.details });
+            } else if (showDetails) {
+              detailsHint.classList.remove("hidden");
+            }
+            return;
+          }
+          const body = await res.json();
+          if (body.safe_mode_info) {
+            applySafeModeInfo(body.safe_mode_info);
+          } else if (config.reason) {
+            applySafeModeInfo({ reason: config.reason, details: config.details });
+          }
+        } catch {
+          if (config.reason) applySafeModeInfo({ reason: config.reason, details: config.details });
+        }
+      }
+
+      if (config.reason) setReason(config.reason);
+      if (showDetails && config.details != null) {
+        applySafeModeInfo({ reason: config.reason ?? "configured", details: config.details });
+      }
+
+      await Promise.all([loadHealth(), loadState()]);
     </script>
   </body>
 </html>
