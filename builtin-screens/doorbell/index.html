@@ -2,53 +2,210 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Doorbell</title>
+    <link rel="stylesheet" href="/builtin/_shared/style.css" />
     <style>
-      :root { color-scheme: dark; }
-      html, body { margin: 0; height: 100%; background: #000; color: #fff; font-family: ui-sans-serif, system-ui, sans-serif; overflow: hidden; }
-      .frame { position: fixed; inset: 0; }
-      img.cam { width: 100%; height: 100%; object-fit: contain; background: #000; }
-      .banner {
-        position: fixed; top: 0; left: 0; right: 0;
-        background: rgba(255, 60, 60, 0.85);
-        color: #fff; text-align: center;
-        font-size: clamp(1.5rem, 3vw, 3rem);
-        padding: 1rem; letter-spacing: 0.05em; text-transform: uppercase;
-        animation: pulse 1.5s ease-in-out infinite alternate;
+      .alert-label {
+        font-size: clamp(1.5rem, calc(3vw * var(--font-scale, 1)), 3.5rem);
       }
-      @keyframes pulse { from { opacity: 0.7; } to { opacity: 1; } }
-      .err { position: fixed; inset: 0; display: grid; place-items: center; color: #ff9b9b; font-size: 1.5rem; }
+      .alert-label-compact {
+        font-size: clamp(1.1rem, calc(1.8vw * var(--font-scale, 1)), 2rem);
+      }
+      @keyframes doorbell-ring {
+        0%, 100% { transform: rotate(0deg); }
+        15% { transform: rotate(14deg); }
+        30% { transform: rotate(-12deg); }
+        45% { transform: rotate(8deg); }
+        60% { transform: rotate(-6deg); }
+        75% { transform: rotate(3deg); }
+      }
+      .doorbell-ring {
+        animation: doorbell-ring 1.2s ease-in-out infinite;
+        transform-origin: top center;
+      }
+      @keyframes pulse-ring {
+        0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 55%, transparent); }
+        70% { box-shadow: 0 0 0 1.75rem color-mix(in oklch, var(--primary) 0%, transparent); }
+        100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 0%, transparent); }
+      }
+      .pulse-frame {
+        animation: pulse-ring 1.6s ease-out infinite;
+      }
+      @keyframes pulse-vignette {
+        0%, 100% { opacity: 0.35; }
+        50% { opacity: 0.85; }
+      }
+      .pulse-vignette {
+        animation: pulse-vignette 1.6s ease-in-out infinite alternate;
+      }
     </style>
   </head>
-  <body>
-    <div class="banner" id="label">Doorbell</div>
-    <div class="frame">
-      <img class="cam" id="cam" alt="" />
+  <body class="fixed inset-0 overflow-hidden bg-background text-foreground">
+    <div id="feed" class="fixed inset-0 z-0 bg-background">
+      <img
+        id="cam"
+        class="w-full h-full object-contain bg-background"
+        alt=""
+      />
     </div>
-    <div class="err" id="err" style="display:none"></div>
-    <script>
-      const params = new URLSearchParams(location.search);
-      let config = {};
-      try { config = JSON.parse(params.get("config") || "{}"); } catch (e) {}
-      document.getElementById("label").textContent = config.label || "Doorbell";
-      const cam = document.getElementById("cam");
-      const err = document.getElementById("err");
 
-      if (!config.snapshot_url) {
-        err.textContent = "Configure snapshot_url";
-        err.style.display = "grid";
-      } else if (config.is_stream) {
-        cam.src = config.snapshot_url;
-      } else {
-        function pull() {
-          const sep = config.snapshot_url.includes("?") ? "&" : "?";
-          cam.src = config.snapshot_url + sep + "_t=" + Date.now();
+    <div
+      id="pulse-vignette"
+      class="pointer-events-none fixed inset-0 z-10 hidden pulse-vignette"
+      style="background: radial-gradient(ellipse at center, transparent 40%, color-mix(in oklch, var(--primary) 45%, transparent) 100%);"
+      aria-hidden="true"
+    ></div>
+
+    <div
+      id="alert"
+      class="pointer-events-none z-20 hidden"
+      role="status"
+      aria-live="polite"
+    >
+      <div id="alert-inner" class="flex items-center gap-3">
+        <img
+          id="alert-icon"
+          class="doorbell-ring hidden size-8 shrink-0 opacity-90"
+          src="/builtin/doorbell/assets/doorbell.svg"
+          alt=""
+        />
+        <span id="alert-label" class="alert-label font-bold uppercase tracking-widest"></span>
+        <span
+          id="countdown"
+          class="hidden tabular text-xl font-medium opacity-90"
+        ></span>
+      </div>
+    </div>
+
+    <div
+      id="err"
+      class="fixed inset-0 z-50 hidden grid place-items-center bg-background p-8"
+      role="alert"
+    >
+      <div class="flex flex-col items-center gap-4 text-center max-w-2xl">
+        <img
+          class="size-16 opacity-80"
+          src="/builtin/doorbell/assets/doorbell.svg"
+          alt=""
+          style="color: var(--destructive)"
+        />
+        <p id="err-text" class="text-2xl text-destructive font-medium"></p>
+        <p class="text-lg text-muted-foreground">
+          Set <code class="rounded-md bg-muted px-2 py-1 text-foreground">snapshot_url</code>
+          in the screen config.
+        </p>
+      </div>
+    </div>
+
+    <script type="module">
+      import { init } from "/builtin/_shared/runtime.js";
+
+      const config = init("doorbell");
+
+      const alertStyle = config.alert_style ?? "banner";
+      const label = config.label ?? "Doorbell";
+      const showCountdown =
+        config.show_countdown === true && Number(config.auto_dismiss_seconds) > 0;
+
+      const cam = document.getElementById("cam");
+      const feed = document.getElementById("feed");
+      const err = document.getElementById("err");
+      const errText = document.getElementById("err-text");
+      const alertEl = document.getElementById("alert");
+      const alertInner = document.getElementById("alert-inner");
+      const alertIcon = document.getElementById("alert-icon");
+      const alertLabel = document.getElementById("alert-label");
+      const countdownEl = document.getElementById("countdown");
+      const pulseVignette = document.getElementById("pulse-vignette");
+
+      alertLabel.textContent = label;
+
+      function applyAlertLayout() {
+        alertEl.classList.remove("hidden");
+        alertInner.className = "flex items-center gap-3";
+        alertIcon.classList.add("hidden");
+        alertLabel.className = "alert-label font-bold uppercase tracking-widest";
+
+        const useAccent = Boolean(config.accent_color);
+
+        if (alertStyle === "badge") {
+          alertEl.className =
+            "pointer-events-none fixed top-4 right-4 z-20 max-w-2xl";
+          alertInner.className += useAccent
+            ? " rounded-2xl border border-primary bg-primary px-5 py-3 text-primary-foreground shadow-xl"
+            : " rounded-2xl border border-destructive bg-destructive px-5 py-3 text-primary-foreground shadow-xl";
+          alertIcon.classList.remove("hidden");
+          alertLabel.className = "alert-label-compact font-semibold tracking-wide";
+        } else if (alertStyle === "pulse") {
+          alertEl.className =
+            "pointer-events-none fixed top-4 left-0 right-0 z-20 flex justify-center px-4";
+          alertInner.className += useAccent
+            ? " pulse-frame rounded-2xl border-2 border-primary bg-primary px-8 py-4 text-primary-foreground shadow-2xl backdrop-blur-md opacity-90"
+            : " pulse-frame rounded-2xl border-2 border-destructive bg-destructive px-8 py-4 text-primary-foreground shadow-2xl backdrop-blur-md opacity-90";
+          alertIcon.classList.remove("hidden");
+          alertLabel.className =
+            "alert-label font-bold uppercase tracking-widest animate-pulse";
+          pulseVignette.classList.remove("hidden");
+        } else {
+          alertEl.className = useAccent
+            ? "pointer-events-none fixed inset-x-0 top-0 z-20 border-b border-primary bg-primary text-primary-foreground shadow-lg backdrop-blur-md opacity-90"
+            : "pointer-events-none fixed inset-x-0 top-0 z-20 border-b border-destructive bg-destructive text-primary-foreground shadow-lg backdrop-blur-md opacity-90";
+          alertInner.className += " justify-center px-6 py-4";
         }
-        pull();
-        setInterval(pull, config.refresh_ms || 1000);
+
+        if (showCountdown) countdownEl.classList.remove("hidden");
       }
 
-      parent.postMessage({ type: "builtin_ready", id: "doorbell" }, "*");
+      function showError(message) {
+        errText.textContent = message;
+        err.classList.remove("hidden");
+        alertEl.classList.add("hidden");
+        feed.classList.add("hidden");
+      }
+
+      if (!config.snapshot_url) {
+        showError("Configure snapshot_url");
+      } else {
+        applyAlertLayout();
+
+        if (config.is_stream) {
+          cam.src = config.snapshot_url;
+        } else {
+          const refreshMs = Math.max(200, Number(config.refresh_ms) || 1000);
+          function pull() {
+            const sep = config.snapshot_url.includes("?") ? "&" : "?";
+            cam.src = config.snapshot_url + sep + "_t=" + Date.now();
+          }
+          pull();
+          setInterval(pull, refreshMs);
+        }
+
+        cam.addEventListener("error", () => {
+          showError("Camera feed unavailable");
+        });
+      }
+
+      if (showCountdown) {
+        let remaining = Math.max(
+          5,
+          Math.min(600, Number(config.auto_dismiss_seconds) || 60),
+        );
+        const tick = () => {
+          const m = Math.floor(remaining / 60);
+          const s = remaining % 60;
+          countdownEl.textContent =
+            (m > 0 ? m + ":" : "") + String(s).padStart(2, "0");
+          if (remaining <= 0) {
+            countdownEl.textContent = "0:00";
+            clearInterval(countdownTimer);
+            return;
+          }
+          remaining -= 1;
+        };
+        tick();
+        const countdownTimer = setInterval(tick, 1000);
+      }
     </script>
   </body>
 </html>

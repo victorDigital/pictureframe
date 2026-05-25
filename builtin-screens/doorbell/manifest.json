@@ -6,10 +6,68 @@
     "type": "object",
     "required": ["snapshot_url"],
     "properties": {
-      "snapshot_url": { "type": "string", "description": "Camera snapshot URL or MJPEG stream" },
-      "is_stream": { "type": "boolean", "default": false, "description": "Treat as a continuous stream rather than a still" },
-      "refresh_ms": { "type": "integer", "minimum": 200, "default": 1000 },
-      "label": { "type": "string", "default": "Doorbell" }
+      "theme": {
+        "type": "string",
+        "enum": ["auto", "light", "dark", "midnight"],
+        "default": "auto",
+        "description": "Color scheme. Auto follows the device/OS preference."
+      },
+      "font_scale": {
+        "type": "number",
+        "minimum": 0.5,
+        "maximum": 2,
+        "format": "range",
+        "default": 1,
+        "description": "Scale alert typography (0.5×–2×)."
+      },
+      "font_family": {
+        "type": "string",
+        "enum": ["geist", "system", "serif", "mono"],
+        "default": "geist",
+        "description": "Typeface for the alert label and countdown."
+      },
+      "alert_style": {
+        "type": "string",
+        "enum": ["badge", "banner", "pulse"],
+        "default": "banner",
+        "description": "How the doorbell alert is presented over the camera feed."
+      },
+      "accent_color": {
+        "type": "string",
+        "format": "color",
+        "description": "Alert accent color. Leave empty for theme destructive red."
+      },
+      "show_countdown": {
+        "type": "boolean",
+        "default": false,
+        "description": "Show a countdown timer when auto_dismiss_seconds is set."
+      },
+      "auto_dismiss_seconds": {
+        "type": "integer",
+        "minimum": 5,
+        "maximum": 600,
+        "description": "Optional seconds until auto-dismiss. Pair with show_countdown and match your HA claim duration."
+      },
+      "snapshot_url": {
+        "type": "string",
+        "description": "Camera snapshot URL or MJPEG stream"
+      },
+      "is_stream": {
+        "type": "boolean",
+        "default": false,
+        "description": "Treat as a continuous stream rather than a still"
+      },
+      "refresh_ms": {
+        "type": "integer",
+        "minimum": 200,
+        "default": 1000,
+        "description": "Snapshot refresh interval in milliseconds (ignored when is_stream is true)."
+      },
+      "label": {
+        "type": "string",
+        "default": "Doorbell",
+        "description": "Alert text shown over the camera feed."
+      }
     }
   }
 }
