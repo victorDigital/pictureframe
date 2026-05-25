@@ -3,49 +3,114 @@
   <head>
     <meta charset="utf-8" />
     <title>Family message</title>
-    <style>
-      :root { color-scheme: dark; }
-      html, body { margin: 0; height: 100%; background: var(--bg, #0a1f2b); color: var(--fg, #f5f5f5); font-family: ui-sans-serif, system-ui, sans-serif; overflow: hidden; }
-      body { display: grid; place-items: center; padding: 4rem; box-sizing: border-box; }
-      .msg { font-size: clamp(2rem, 6vw, 6rem); line-height: 1.2; text-align: center; max-width: 50rem; }
-      .meta { position: fixed; bottom: 2rem; left: 0; right: 0; text-align: center; opacity: 0.55; font-size: 1rem; }
-      .empty { opacity: 0.4; font-size: 1.5rem; }
-    </style>
+    <link rel="stylesheet" href="/builtin/_shared/style.css" />
   </head>
-  <body>
-    <div class="msg" id="msg"></div>
-    <div class="meta" id="meta"></div>
-    <script>
-      const params = new URLSearchParams(location.search);
-      let config = {};
-      try { config = JSON.parse(params.get("config") || "{}"); } catch (e) {}
-      if (config.background) document.body.style.setProperty("--bg", config.background);
-      if (config.color) document.body.style.setProperty("--fg", config.color);
+  <body class="screen-root">
+    <main
+      id="panel"
+      class="flex flex-col gap-6 w-full max-w-4xl px-8 py-12 items-center justify-center min-h-0"
+    >
+      <blockquote
+        id="msg"
+        class="text-title-lg text-foreground text-balance leading-snug w-full m-0"
+      ></blockquote>
+      <p id="signature" class="text-body text-primary hidden w-full"></p>
+    </main>
+    <footer
+      id="meta"
+      class="fixed inset-x-0 bottom-0 px-8 pb-8 text-center text-caption tabular"
+    ></footer>
+    <script type="module">
+      import { init, fetchWithTimeout, formatTime } from "/builtin/_shared/runtime.js";
+
+      const config = init("family-message");
+
+      if (config.background) {
+        document.documentElement.style.setProperty("--background", config.background);
+      }
+      if (config.color) {
+        document.documentElement.style.setProperty("--foreground", config.color);
+      }
+
+      const WEIGHT = {
+        light: "font-light",
+        normal: "font-normal",
+        medium: "font-medium",
+        semibold: "font-semibold",
+        bold: "font-bold",
+      };
+      const ALIGN = {
+        left: "text-left items-start",
+        center: "text-center items-center",
+        right: "text-right items-end",
+      };
+
+      const weight = WEIGHT[config.font_weight] ?? WEIGHT.normal;
+      const align = config.text_align ?? "center";
+      const alignMsg = ALIGN[align] ?? ALIGN.center;
+
+      const panel = document.getElementById("panel");
+      const msg = document.getElementById("msg");
+      const signature = document.getElementById("signature");
+      const meta = document.getElementById("meta");
+
+      msg.classList.add(weight, alignMsg.split(" ")[0]);
+      panel.classList.remove("items-center");
+      for (const cls of alignMsg.split(" ")) panel.classList.add(cls);
+
+      if (config.signature_text?.trim()) {
+        signature.textContent = config.signature_text.trim();
+        signature.classList.remove("hidden");
+        signature.classList.add(alignMsg.split(" ")[0]);
+      }
+
+      const showFooter = config.show_footer !== false;
+      if (!showFooter) meta.classList.add("hidden");
+
+      function renderEmpty(label) {
+        msg.innerHTML =
+          '<span class="text-muted-foreground font-normal text-title-sm">' +
+          escapeHtml(label) +
+          "</span>";
+        if (showFooter) meta.textContent = "";
+      }
+
+      function escapeHtml(s) {
+        return String(s)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
 
       async function refresh() {
         try {
-          const r = await fetch("/api/family_message/current");
+          const r = await fetchWithTimeout("/api/family_message/current");
           if (!r.ok) throw new Error("HTTP " + r.status);
           const data = await r.json();
           if (data.message) {
-            document.getElementById("msg").textContent = data.message;
-            const when = new Date(data.posted_at);
-            const remaining = Math.max(0, data.expires_at - Date.now());
-            const min = Math.round(remaining / 60000);
-            document.getElementById("meta").textContent =
-              "Posted " + when.toLocaleTimeString() + " — visible for " + min + " min";
+            msg.textContent = data.message;
+            if (showFooter) {
+              const when = new Date(data.posted_at);
+              const remaining = Math.max(0, data.expires_at - Date.now());
+              const min = Math.round(remaining / 60000);
+              meta.textContent =
+                "Posted " +
+                formatTime(when) +
+                " — visible for " +
+                min +
+                " min";
+            }
           } else {
-            document.getElementById("msg").innerHTML = '<span class="empty">No message.</span>';
-            document.getElementById("meta").textContent = "";
+            renderEmpty("No message.");
           }
         } catch (e) {
-          document.getElementById("msg").innerHTML = '<span class="empty">' + e + '</span>';
+          renderEmpty(String(e));
         }
       }
 
       refresh();
       setInterval(refresh, 10000);
-      parent.postMessage({ type: "builtin_ready", id: "family-message" }, "*");
     </script>
   </body>
 </html>

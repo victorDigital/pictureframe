@@ -5,8 +5,65 @@
   "config_schema": {
     "type": "object",
     "properties": {
-      "background": { "type": "string", "default": "#0a1f2b" },
-      "color": { "type": "string", "default": "#f5f5f5" }
+      "theme": {
+        "type": "string",
+        "enum": ["auto", "light", "dark", "midnight"],
+        "default": "auto",
+        "description": "Color theme"
+      },
+      "font_scale": {
+        "type": "number",
+        "minimum": 0.5,
+        "maximum": 2,
+        "default": 1,
+        "format": "range",
+        "description": "Scale all text sizes"
+      },
+      "font_family": {
+        "type": "string",
+        "enum": ["geist", "system", "serif", "mono"],
+        "default": "geist",
+        "description": "Typeface"
+      },
+      "font_weight": {
+        "type": "string",
+        "enum": ["light", "normal", "medium", "semibold", "bold"],
+        "default": "normal",
+        "description": "Message weight"
+      },
+      "accent_color": {
+        "type": "string",
+        "format": "color",
+        "description": "Accent color (signature line, empty-state hint)"
+      },
+      "background": {
+        "type": "string",
+        "format": "color",
+        "default": "#0a1f2b",
+        "description": "Override background (legacy)"
+      },
+      "color": {
+        "type": "string",
+        "format": "color",
+        "default": "#f5f5f5",
+        "description": "Override text color (legacy)"
+      },
+      "text_align": {
+        "type": "string",
+        "enum": ["left", "center", "right"],
+        "default": "center",
+        "description": "Message alignment"
+      },
+      "show_footer": {
+        "type": "boolean",
+        "default": true,
+        "description": "Show posted time and remaining visibility"
+      },
+      "signature_text": {
+        "type": "string",
+        "default": "",
+        "description": "Optional signature line below the message (e.g. a family name)"
+      }
     }
   }
 }
