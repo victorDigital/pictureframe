@@ -1,6 +1,51 @@
 import { useEffect, useMemo, useState } from "react";
-import type { CSSProperties } from "react";
+import { toast } from "sonner";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  Alert02Icon,
+  ComputerIcon,
+  Download01Icon,
+  KeyIcon,
+  LogoutIcon,
+  Notification01Icon,
+  PictureInPictureOnIcon,
+  PuzzleIcon,
+  Settings02Icon,
+  ShieldIcon,
+  Sun01Icon,
+  Time03Icon,
+} from "@hugeicons/core-free-icons";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { api, setToken } from "../api.js";
+import { ConfirmButton } from "./common/ConfirmButton.js";
+import { ErrorAlert } from "./common/ErrorAlert.js";
+import { PageHeader } from "./common/PageHeader.js";
 
 const OVERRIDE_PHRASE = "I understand this disables verification temporarily";
 
@@ -88,7 +133,6 @@ export function SettingsSection({ onSignOut }: { onSignOut: () => void }) {
   const [screens, setScreens] = useState<Screen[]>([]);
   const [builtins, setBuiltins] = useState<Builtin[]>([]);
   const [err, setErr] = useState<string | null>(null);
-  const [okMsg, setOkMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [newToken, setNewToken] = useState<string | null>(null);
 
@@ -103,7 +147,7 @@ export function SettingsSection({ onSignOut }: { onSignOut: () => void }) {
       setScreens(s.screens);
       setBuiltins(b.builtins);
     } catch (e) {
-      setErr(String(e));
+      setErr(String(e instanceof Error ? e.message : e));
     }
   }
   useEffect(() => {
@@ -113,23 +157,20 @@ export function SettingsSection({ onSignOut }: { onSignOut: () => void }) {
   async function save(patch: ConfigPatch, successMsg?: string) {
     setBusy(true);
     setErr(null);
-    setOkMsg(null);
     try {
       await api("/api/settings/config", { method: "PUT", body: JSON.stringify(patch) });
       await refresh();
-      if (successMsg) setOkMsg(successMsg);
+      if (successMsg) toast.success(successMsg);
     } catch (e) {
-      setErr(String(e));
+      const msg = String(e instanceof Error ? e.message : e);
+      setErr(msg);
+      toast.error(msg);
     } finally {
       setBusy(false);
     }
   }
 
   async function rotate() {
-    const sure = confirm(
-      "Rotate the bearer token?\n\nAll other browser sessions will be signed out — including any mobile app or Home Assistant integration using this token.",
-    );
-    if (!sure) return;
     setBusy(true);
     try {
       const r = await api<{ ok: true; token: string }>("/api/settings/rotate_bearer", {
@@ -137,55 +178,56 @@ export function SettingsSection({ onSignOut }: { onSignOut: () => void }) {
       });
       setToken(r.token);
       setNewToken(r.token);
+      toast.success("Bearer token rotated");
     } catch (e) {
-      setErr(String(e));
+      setErr(String(e instanceof Error ? e.message : e));
     } finally {
       setBusy(false);
     }
   }
 
-  if (!cfg) return <div className="tile">Loading…</div>;
+  if (!cfg) return <Card><CardContent className="py-6 text-muted-foreground">Loading…</CardContent></Card>;
 
   return (
     <>
-      <div className="tile">
-        <h2>Bearer token</h2>
-        <p>
-          Rotating the token signs out every other session (mobile app, Home Assistant integration,
-          additional browsers). Your current session is updated to the new token automatically.
-        </p>
-        {err && <div className="banner">{err}</div>}
-        {okMsg && <SuccessBanner msg={okMsg} />}
-        {newToken && (
-          <div
-            className="banner"
-            style={{
-              background: "rgba(79, 140, 255, 0.12)",
-              borderColor: "var(--accent)",
-              color: "var(--accent)",
-            }}
+      <PageHeader
+        title="Settings"
+        description="Device configuration. Changes are validated against the frame schema."
+        actions={
+          <ConfirmButton
+            variant="destructive"
+            size="sm"
+            destructive
+            title="Sign out of the control panel?"
+            description="This clears the bearer token from your browser. Other sessions are unaffected."
+            confirmLabel="Sign out"
+            onConfirm={onSignOut}
           >
-            <strong>New token:</strong> <code>{newToken}</code>
-            <div style={{ color: "var(--muted)", marginTop: "0.5rem" }}>
-              Saved to <code>{cfg.device.bearer_token_file}</code>. Update every other client.
-            </div>
-          </div>
-        )}
-        <div className="row" style={{ marginTop: "1rem" }}>
-          <button className="secondary" onClick={rotate} disabled={busy}>
-            Rotate token
-          </button>
-          <button className="danger" onClick={onSignOut} style={{ marginLeft: "auto" }}>
+            <HugeiconsIcon icon={LogoutIcon} strokeWidth={2} />
             Sign out
-          </button>
-        </div>
-      </div>
+          </ConfirmButton>
+        }
+      />
 
       {cfg.safe_mode && (
-        <div className="banner">
-          Frame is in safe mode — config edits are disabled until frame.yaml validates.
-        </div>
+        <Alert variant="destructive">
+          <HugeiconsIcon icon={Alert02Icon} strokeWidth={2} />
+          <AlertTitle>Safe mode</AlertTitle>
+          <AlertDescription>
+            Config edits are disabled until <code className="rounded bg-muted px-1">frame.yaml</code>
+            {" "}validates.
+          </AlertDescription>
+        </Alert>
       )}
+
+      <BearerTokenTile
+        cfg={cfg}
+        busy={busy}
+        onRotate={rotate}
+        newToken={newToken}
+        err={err}
+        onClearErr={() => setErr(null)}
+      />
 
       <DeviceTile cfg={cfg} save={save} busy={busy || cfg.safe_mode} />
       <DisplayTile cfg={cfg} save={save} busy={busy || cfg.safe_mode} />
@@ -199,24 +241,8 @@ export function SettingsSection({ onSignOut }: { onSignOut: () => void }) {
       <UpdaterTile cfg={cfg} save={save} busy={busy || cfg.safe_mode} />
       <VncTile cfg={cfg} save={save} busy={busy || cfg.safe_mode} />
       <BuiltinsTile cfg={cfg} builtins={builtins} save={save} busy={busy || cfg.safe_mode} />
-
       <SigningKeyTile />
     </>
-  );
-}
-
-function SuccessBanner({ msg }: { msg: string }) {
-  return (
-    <div
-      className="banner"
-      style={{
-        background: "rgba(79, 140, 255, 0.12)",
-        borderColor: "var(--accent)",
-        color: "var(--accent)",
-      }}
-    >
-      {msg}
-    </div>
   );
 }
 
@@ -226,38 +252,130 @@ type TileProps = {
   busy: boolean;
 };
 
+function SettingsCard({
+  icon: Icon,
+  title,
+  description,
+  children,
+}: {
+  icon: typeof KeyIcon;
+  title: string;
+  description?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-muted-foreground">
+          <HugeiconsIcon icon={Icon} strokeWidth={2} className="size-4" />
+          {title}
+        </CardTitle>
+        {description && <CardDescription>{description}</CardDescription>}
+      </CardHeader>
+      <CardContent className="space-y-3">{children}</CardContent>
+    </Card>
+  );
+}
+
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label className="text-xs">{label}</Label>
+      {children}
+      {hint && <p className="text-[10px] text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+function BearerTokenTile({
+  cfg,
+  busy,
+  onRotate,
+  newToken,
+  err,
+  onClearErr,
+}: {
+  cfg: FrameConfigView;
+  busy: boolean;
+  onRotate: () => void;
+  newToken: string | null;
+  err: string | null;
+  onClearErr: () => void;
+}) {
+  return (
+    <SettingsCard
+      icon={KeyIcon}
+      title="Bearer token"
+      description="Rotating signs out every other session (mobile app, HA integration, other browsers). Your current session is updated automatically."
+    >
+      {err && <ErrorAlert message={err} onDismiss={onClearErr} />}
+      {newToken && (
+        <Alert>
+          <HugeiconsIcon icon={KeyIcon} strokeWidth={2} />
+          <AlertTitle>New token</AlertTitle>
+          <AlertDescription>
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">{newToken}</code>
+            <div className="mt-1 text-[10px]">
+              Saved to <code>{cfg.device.bearer_token_file}</code>. Update every other client.
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+      <div className="flex items-center gap-2">
+        <ConfirmButton
+          variant="outline"
+          destructive
+          title="Rotate the bearer token?"
+          description="All other browser sessions will be signed out — including any mobile app or Home Assistant integration using this token."
+          confirmLabel="Rotate"
+          disabled={busy}
+          onConfirm={onRotate}
+        >
+          <HugeiconsIcon icon={KeyIcon} strokeWidth={2} />
+          Rotate token
+        </ConfirmButton>
+      </div>
+    </SettingsCard>
+  );
+}
+
 function DeviceTile({ cfg, save, busy }: TileProps) {
   const [name, setName] = useState(cfg.device.name);
   useEffect(() => setName(cfg.device.name), [cfg.device.name]);
 
   return (
-    <div className="tile">
-      <h2>Device</h2>
-      <label>Name</label>
-      <input
-        type="text"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="living-room-frame"
-      />
-      <p style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: "0.25rem" }}>
-        Used as the MQTT node id and Home Assistant device name. Restart required to
-        re-publish discovery topics.
+    <SettingsCard icon={Settings02Icon} title="Device">
+      <Field
+        label="Name"
+        hint="Used as the MQTT node id and Home Assistant device name. Restart required to re-publish discovery topics."
+      >
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="living-room-frame"
+        />
+      </Field>
+      <p className="text-[10px] text-muted-foreground">
+        Bearer token file: <code className="rounded bg-muted px-1">{cfg.device.bearer_token_file}</code>
       </p>
-      <p style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
-        Bearer token file: <code>{cfg.device.bearer_token_file}</code>
-      </p>
-      <div className="row" style={{ marginTop: "0.5rem" }}>
-        <button
-          className="primary"
+      <div className="flex items-center gap-2 pt-1">
+        <Button
           disabled={busy || name === cfg.device.name || !name.trim()}
           onClick={() => save({ device: { name: name.trim() } }, "Device name saved.")}
         >
           Save
-        </button>
+        </Button>
         <RestartBadge />
       </div>
-    </div>
+    </SettingsCard>
   );
 }
 
@@ -276,43 +394,44 @@ function DisplayTile({ cfg, save, busy }: TileProps) {
     defaultB !== cfg.display.default_brightness;
 
   return (
-    <div className="tile">
-      <h2>Display</h2>
-      <label>Brightness backend</label>
-      <select
-        value={backend}
-        onChange={(e) => setBackend(e.target.value as FrameConfigView["display"]["brightness_backend"])}
-        style={selectStyle}
-      >
-        <option value="backlight">backlight (sysfs)</option>
-        <option value="ddcutil">ddcutil (external monitor)</option>
-        <option value="none">none</option>
-      </select>
+    <SettingsCard icon={Sun01Icon} title="Display">
+      <Field label="Brightness backend">
+        <Select
+          value={backend}
+          onValueChange={(v) =>
+            setBackend(v as FrameConfigView["display"]["brightness_backend"])
+          }
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="backlight">backlight (sysfs)</SelectItem>
+            <SelectItem value="ddcutil">ddcutil (external monitor)</SelectItem>
+            <SelectItem value="none">none</SelectItem>
+          </SelectContent>
+        </Select>
+      </Field>
       {backend === "backlight" && (
-        <>
-          <label>Backlight device path</label>
-          <input
-            type="text"
+        <Field label="Backlight device path">
+          <Input
             value={device}
             onChange={(e) => setDevice(e.target.value)}
             placeholder="/sys/class/backlight/intel_backlight"
           />
-        </>
+        </Field>
       )}
-      <label style={{ marginTop: "0.75rem", display: "block" }}>
-        Default brightness ({defaultB}%)
-      </label>
-      <input
-        type="range"
-        min={0}
-        max={100}
-        value={defaultB}
-        onChange={(e) => setDefaultB(Number(e.target.value))}
-        style={{ width: "100%" }}
-      />
-      <div className="row" style={{ marginTop: "0.5rem" }}>
-        <button
-          className="primary"
+      <Field label={`Default brightness (${defaultB}%)`}>
+        <Slider
+          min={0}
+          max={100}
+          step={1}
+          value={[defaultB]}
+          onValueChange={(v) => setDefaultB(v[0] ?? defaultB)}
+        />
+      </Field>
+      <div className="flex items-center gap-2 pt-1">
+        <Button
           disabled={busy || !dirty}
           onClick={() =>
             save(
@@ -328,9 +447,9 @@ function DisplayTile({ cfg, save, busy }: TileProps) {
           }
         >
           Save
-        </button>
+        </Button>
       </div>
-    </div>
+    </SettingsCard>
   );
 }
 
@@ -346,7 +465,10 @@ function SchedulerTile({
 
   useEffect(() => setDefaultScreen(cfg.default_screen), [cfg.default_screen]);
   useEffect(() => setPinned(cfg.manual_pinned_timeout_hours), [cfg.manual_pinned_timeout_hours]);
-  useEffect(() => setMaxPre(cfg.scheduler.max_preloaded_url_screens), [cfg.scheduler.max_preloaded_url_screens]);
+  useEffect(
+    () => setMaxPre(cfg.scheduler.max_preloaded_url_screens),
+    [cfg.scheduler.max_preloaded_url_screens],
+  );
 
   const dirty =
     defaultScreen !== cfg.default_screen ||
@@ -354,39 +476,41 @@ function SchedulerTile({
     maxPre !== cfg.scheduler.max_preloaded_url_screens;
 
   return (
-    <div className="tile">
-      <h2>Scheduler</h2>
-      <label>Default screen (shown when nothing else is claiming)</label>
-      <select
-        value={defaultScreen}
-        onChange={(e) => setDefaultScreen(e.target.value)}
-        style={selectStyle}
-      >
-        {screens.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.name} ({s.id})
-          </option>
-        ))}
-      </select>
-      <label>Manual-pinned timeout (hours)</label>
-      <input
-        type="number"
-        min={0}
-        max={168}
-        value={pinned}
-        onChange={(e) => setPinned(Number(e.target.value))}
-      />
-      <label>Max preloaded URL screens</label>
-      <input
-        type="number"
-        min={1}
-        max={20}
-        value={maxPre}
-        onChange={(e) => setMaxPre(Number(e.target.value))}
-      />
-      <div className="row" style={{ marginTop: "0.5rem" }}>
-        <button
-          className="primary"
+    <SettingsCard icon={Time03Icon} title="Scheduler">
+      <Field label="Default screen" hint="Shown when nothing else is claiming.">
+        <Select value={defaultScreen} onValueChange={setDefaultScreen}>
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {screens.map((s) => (
+              <SelectItem key={s.id} value={s.id}>
+                {s.name} <span className="text-muted-foreground">({s.id})</span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Manual-pinned timeout (hours)">
+        <Input
+          type="number"
+          min={0}
+          max={168}
+          value={pinned}
+          onChange={(e) => setPinned(Number(e.target.value))}
+        />
+      </Field>
+      <Field label="Max preloaded URL screens">
+        <Input
+          type="number"
+          min={1}
+          max={20}
+          value={maxPre}
+          onChange={(e) => setMaxPre(Number(e.target.value))}
+        />
+      </Field>
+      <div className="flex items-center gap-2 pt-1">
+        <Button
           disabled={busy || !dirty}
           onClick={() =>
             save(
@@ -400,9 +524,9 @@ function SchedulerTile({
           }
         >
           Save
-        </button>
+        </Button>
       </div>
-    </div>
+    </SettingsCard>
   );
 }
 
@@ -457,74 +581,73 @@ function HomeAssistantTile({ cfg, save, busy }: TileProps) {
   };
 
   return (
-    <div className="tile">
-      <h2>Home Assistant (MQTT)</h2>
-      <label style={checkboxLabel}>
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(e) => setEnabled(e.target.checked)}
-        />
-        Enabled
-      </label>
-      <label>Broker host (hostname or IPv4)</label>
-      <input
-        type="text"
-        value={host}
-        onChange={(e) => setHost(e.target.value)}
-        placeholder="homeassistant.local"
-      />
-      {host && !hostValid && (
-        <div style={{ color: "var(--danger)", fontSize: "0.85rem", marginTop: "0.25rem" }}>
-          Must be a hostname or IPv4 address.
+    <SettingsCard icon={Notification01Icon} title="Home Assistant (MQTT)">
+      <div className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2">
+        <div>
+          <div className="text-xs font-medium">Enabled</div>
+          <div className="text-[10px] text-muted-foreground">
+            Connects to the MQTT broker and publishes discovery topics.
+          </div>
         </div>
-      )}
-      <label>Port</label>
-      <input
-        type="number"
-        min={1}
-        max={65535}
-        value={port}
-        onChange={(e) => setPort(Number(e.target.value))}
-      />
-      <label>Username</label>
-      <input
-        type="text"
-        value={username}
-        onChange={(e) => setUsername(e.target.value)}
-        placeholder="frame"
-      />
-      <label>Keepalive (seconds)</label>
-      <input
-        type="number"
-        min={5}
-        max={3600}
-        value={keepalive}
-        onChange={(e) => setKeepalive(Number(e.target.value))}
-      />
-      <label>Discovery prefix</label>
-      <input
-        type="text"
-        value={discoveryPrefix}
-        onChange={(e) => setDiscoveryPrefix(e.target.value)}
-        placeholder="homeassistant"
-      />
-      <p style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: "0.5rem" }}>
-        Password file: <code>{initial.mqtt?.password_file ?? "(unset)"}</code> — edit on disk
-        or via the install script. Bearer-token endpoints do not surface secret bytes.
+        <Switch checked={enabled} onCheckedChange={setEnabled} />
+      </div>
+      <Field label="Broker host (hostname or IPv4)">
+        <Input
+          value={host}
+          onChange={(e) => setHost(e.target.value)}
+          placeholder="homeassistant.local"
+          aria-invalid={host !== "" && !hostValid}
+        />
+        {host !== "" && !hostValid && (
+          <p className="text-[10px] text-destructive">Must be a hostname or IPv4 address.</p>
+        )}
+      </Field>
+      <Field label="Port">
+        <Input
+          type="number"
+          min={1}
+          max={65535}
+          value={port}
+          onChange={(e) => setPort(Number(e.target.value))}
+        />
+      </Field>
+      <Field label="Username">
+        <Input
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder="frame"
+        />
+      </Field>
+      <Field label="Keepalive (seconds)">
+        <Input
+          type="number"
+          min={5}
+          max={3600}
+          value={keepalive}
+          onChange={(e) => setKeepalive(Number(e.target.value))}
+        />
+      </Field>
+      <Field label="Discovery prefix">
+        <Input
+          value={discoveryPrefix}
+          onChange={(e) => setDiscoveryPrefix(e.target.value)}
+          placeholder="homeassistant"
+        />
+      </Field>
+      <p className="text-[10px] text-muted-foreground">
+        Password file: <code className="rounded bg-muted px-1">{initial.mqtt?.password_file ?? "(unset)"}</code>
+        {" "}— edit on disk or via the install script. Bearer-token endpoints do not surface secret
+        bytes.
       </p>
-      <div className="row" style={{ marginTop: "0.5rem" }}>
-        <button
-          className="primary"
-          disabled={
-            busy || !dirty || (enabled && (!host || !hostValid || !username))
-          }
+      <div className="flex items-center gap-2 pt-1">
+        <Button
+          disabled={busy || !dirty || (enabled && (!host || !hostValid || !username))}
           onClick={submit}
         >
           Save
-        </button>
+        </Button>
       </div>
-    </div>
+    </SettingsCard>
   );
 }
 
@@ -557,76 +680,87 @@ function UpdaterTile({ cfg, save, busy }: TileProps) {
     retain !== u.retain_releases;
 
   return (
-    <div className="tile">
-      <h2>Updater</h2>
-      <label>GitHub repo (owner/repo)</label>
-      <input
-        type="text"
-        value={repo}
-        onChange={(e) => setRepo(e.target.value)}
-        placeholder="victorDigital/pictureframe"
-      />
-      {!repoValid && (
-        <div style={{ color: "var(--danger)", fontSize: "0.85rem", marginTop: "0.25rem" }}>
-          Format must be <code>owner/repo</code>.
-        </div>
-      )}
-      <label>Channel</label>
-      <select
-        value={channel}
-        onChange={(e) => setChannel(e.target.value as "stable" | "beta")}
-        style={selectStyle}
-      >
-        <option value="stable">stable</option>
-        <option value="beta">beta</option>
-      </select>
-      <label style={checkboxLabel}>
-        <input
-          type="checkbox"
-          checked={autoApply}
-          onChange={(e) => setAutoApply(e.target.checked)}
+    <SettingsCard icon={Download01Icon} title="Updater">
+      <Field label="GitHub repo (owner/repo)">
+        <Input
+          value={repo}
+          onChange={(e) => setRepo(e.target.value)}
+          placeholder="victorDigital/pictureframe"
+          aria-invalid={!repoValid}
         />
-        Auto-apply once past staging delay
-      </label>
-      <label>Poll interval (minutes)</label>
-      <input
-        type="number"
-        min={1}
-        max={1440}
-        value={pollMin}
-        onChange={(e) => setPollMin(Number(e.target.value))}
-      />
-      <label>Staging delay (hours)</label>
-      <input
-        type="number"
-        min={0}
-        max={720}
-        value={stagingHours}
-        onChange={(e) => setStagingHours(Number(e.target.value))}
-      />
-      <label>Health check window (seconds)</label>
-      <input
-        type="number"
-        min={5}
-        max={3600}
-        value={healthSec}
-        onChange={(e) => setHealthSec(Number(e.target.value))}
-      />
-      <label>Retain releases on disk</label>
-      <input
-        type="number"
-        min={1}
-        max={20}
-        value={retain}
-        onChange={(e) => setRetain(Number(e.target.value))}
-      />
-      <p style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: "0.5rem" }}>
+        {!repoValid && (
+          <p className="text-[10px] text-destructive">
+            Format must be <code>owner/repo</code>.
+          </p>
+        )}
+      </Field>
+      <Field label="Channel">
+        <Select value={channel} onValueChange={(v) => setChannel(v as "stable" | "beta")}>
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="stable">stable</SelectItem>
+            <SelectItem value="beta">beta</SelectItem>
+          </SelectContent>
+        </Select>
+      </Field>
+      <div className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2">
+        <div>
+          <div className="text-xs font-medium">Auto-apply</div>
+          <div className="text-[10px] text-muted-foreground">
+            Apply releases automatically once past the staging delay.
+          </div>
+        </div>
+        <Switch checked={autoApply} onCheckedChange={setAutoApply} />
+      </div>
+      <Field label="Poll interval (minutes)">
+        <Input
+          type="number"
+          min={1}
+          max={1440}
+          value={pollMin}
+          onChange={(e) => setPollMin(Number(e.target.value))}
+        />
+      </Field>
+      <Field label="Staging delay (hours)">
+        <Input
+          type="number"
+          min={0}
+          max={720}
+          value={stagingHours}
+          onChange={(e) => setStagingHours(Number(e.target.value))}
+        />
+      </Field>
+      <Field label="Health check window (seconds)">
+        <Input
+          type="number"
+          min={5}
+          max={3600}
+          value={healthSec}
+          onChange={(e) => setHealthSec(Number(e.target.value))}
+        />
+      </Field>
+      <Field label="Retain releases on disk">
+        <Input
+          type="number"
+          min={1}
+          max={20}
+          value={retain}
+          onChange={(e) => setRetain(Number(e.target.value))}
+        />
+      </Field>
+      <p className="text-[10px] text-muted-foreground">
         Signing key:{" "}
-        {u.signing_key_file ? <code>{u.signing_key_file}</code> : "not configured"}.
+        {u.signing_key_file ? (
+          <code className="rounded bg-muted px-1">{u.signing_key_file}</code>
+        ) : (
+          "not configured"
+        )}
+        .
       </p>
-      <div className="row" style={{ marginTop: "0.5rem" }}>
-        <button
-          className="primary"
+      <div className="flex items-center gap-2 pt-1">
+        <Button
           disabled={busy || !dirty || !repoValid}
           onClick={() =>
             save(
@@ -646,10 +780,10 @@ function UpdaterTile({ cfg, save, busy }: TileProps) {
           }
         >
           Save
-        </button>
+        </Button>
         <RestartBadge label="repo / poll interval / health window changes apply on next restart" />
       </div>
-    </div>
+    </SettingsCard>
   );
 }
 
@@ -659,30 +793,30 @@ function VncTile({ cfg, save, busy }: TileProps) {
   useEffect(() => setEnabled(initial), [initial]);
 
   return (
-    <div className="tile">
-      <h2>VNC</h2>
-      <label style={checkboxLabel}>
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(e) => setEnabled(e.target.checked)}
-        />
-        Enabled (allow Start VNC from the VNC tab)
-      </label>
-      <p style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
-        Disabling stops a running wayvnc/websockify pair if one is up. Password file:{" "}
-        <code>{cfg.vnc?.password_file ?? "(unset)"}</code>.
+    <SettingsCard icon={ComputerIcon} title="VNC">
+      <div className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2">
+        <div>
+          <div className="text-xs font-medium">Enabled</div>
+          <div className="text-[10px] text-muted-foreground">
+            Allows Start VNC from the VNC tab. Disabling stops a running wayvnc/websockify pair.
+          </div>
+        </div>
+        <Switch checked={enabled} onCheckedChange={setEnabled} />
+      </div>
+      <p className="text-[10px] text-muted-foreground">
+        Password file:{" "}
+        <code className="rounded bg-muted px-1">{cfg.vnc?.password_file ?? "(unset)"}</code>
+        .
       </p>
-      <div className="row" style={{ marginTop: "0.5rem" }}>
-        <button
-          className="primary"
+      <div className="flex items-center gap-2 pt-1">
+        <Button
           disabled={busy || enabled === initial}
           onClick={() => save({ vnc: { enabled } }, "VNC setting saved.")}
         >
           Save
-        </button>
+        </Button>
       </div>
-    </div>
+    </SettingsCard>
   );
 }
 
@@ -692,8 +826,6 @@ function BuiltinsTile({
   save,
   busy,
 }: TileProps & { builtins: Builtin[] }) {
-  // Show every builtin that ships with the repo so operators can flip
-  // family_message and similar opt-in screens without editing yaml.
   const [drafts, setDrafts] = useState<Record<string, boolean>>({});
 
   const builtinIds = useMemo(() => {
@@ -711,9 +843,7 @@ function BuiltinsTile({
     return drafts[id] ?? currentEnabled(id);
   }
 
-  const dirty = Object.entries(drafts).some(
-    ([id, v]) => v !== currentEnabled(id),
-  );
+  const dirty = Object.entries(drafts).some(([id, v]) => v !== currentEnabled(id));
 
   function descriptionFor(id: string): string | undefined {
     const key = id.replace(/_/g, "-");
@@ -721,49 +851,35 @@ function BuiltinsTile({
   }
 
   return (
-    <div className="tile">
-      <h2>Built-in screens</h2>
-      <p style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
-        Toggle opt-in features here. Per-screen options (weather coordinates, photo libraries,
-        etc.) live on the Screens tab.
-      </p>
+    <SettingsCard
+      icon={PuzzleIcon}
+      title="Built-in screens"
+      description="Toggle opt-in features here. Per-screen options (weather coordinates, photo libraries, etc.) live on the Screens tab."
+    >
       {builtinIds.length === 0 ? (
-        <p style={{ color: "var(--muted)" }}>No built-ins registered.</p>
+        <p className="py-2 text-xs text-muted-foreground">No built-ins registered.</p>
       ) : (
-        builtinIds.map((id) => (
-          <label
-            key={id}
-            style={{
-              display: "flex",
-              gap: "0.6rem",
-              alignItems: "flex-start",
-              padding: "0.4rem 0",
-              borderTop: "1px solid var(--border)",
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={effective(id)}
-              onChange={(e) =>
-                setDrafts((d) => ({ ...d, [id]: e.target.checked }))
-              }
-            />
-            <div>
-              <div>
-                <code>{id}</code>
+        <div className="divide-y divide-border/60">
+          {builtinIds.map((id) => (
+            <div key={id} className="flex items-start gap-3 py-2 first:pt-0">
+              <Switch
+                checked={effective(id)}
+                onCheckedChange={(checked) =>
+                  setDrafts((d) => ({ ...d, [id]: checked }))
+                }
+              />
+              <div className="flex-1">
+                <code className="text-xs font-medium">{id}</code>
+                {descriptionFor(id) && (
+                  <p className="text-[10px] text-muted-foreground">{descriptionFor(id)}</p>
+                )}
               </div>
-              {descriptionFor(id) && (
-                <div style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
-                  {descriptionFor(id)}
-                </div>
-              )}
             </div>
-          </label>
-        ))
+          ))}
+        </div>
       )}
-      <div className="row" style={{ marginTop: "0.75rem" }}>
-        <button
-          className="primary"
+      <div className="flex items-center gap-2 pt-1">
+        <Button
           disabled={busy || !dirty}
           onClick={() => {
             const payload: Record<string, { enabled: boolean }> = {};
@@ -774,27 +890,17 @@ function BuiltinsTile({
           }}
         >
           Save
-        </button>
+        </Button>
       </div>
-    </div>
+    </SettingsCard>
   );
 }
 
 function RestartBadge({ label }: { label?: string } = {}) {
   return (
-    <span
-      style={{
-        marginLeft: "auto",
-        color: "var(--muted)",
-        fontSize: "0.78rem",
-        border: "1px solid var(--border)",
-        padding: "0.15rem 0.5rem",
-        borderRadius: "0.4rem",
-      }}
-      title={label}
-    >
+    <Badge variant="outline" className="ml-auto" title={label}>
       {label ? "requires restart" : "applies after restart"}
-    </span>
+    </Badge>
   );
 }
 
@@ -810,14 +916,13 @@ function SigningKeyTile() {
   const [sigText, setSigText] = useState("");
   const [override, setOverride] = useState("");
   const [err, setErr] = useState<string | null>(null);
-  const [okMsg, setOkMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function refresh() {
     try {
       setStatus(await api<SigningKeyStatus>("/api/settings/signing_key"));
     } catch (e) {
-      setErr(String(e));
+      setErr(String(e instanceof Error ? e.message : e));
     }
   }
   useEffect(() => {
@@ -826,15 +931,13 @@ function SigningKeyTile() {
 
   async function submit() {
     setErr(null);
-    setOkMsg(null);
     if (!keyText.includes("BEGIN PGP PUBLIC KEY BLOCK")) {
       setErr("Paste an ASCII-armored PGP public key (BEGIN PGP PUBLIC KEY BLOCK).");
       return;
     }
     if (status?.configured && !sigText && override !== OVERRIDE_PHRASE) {
       setErr(
-        "Rotating an existing key requires either a detached signature from the old key, " +
-          "or the explicit override phrase typed in full.",
+        "Rotating an existing key requires either a detached signature from the old key, or the explicit override phrase typed in full.",
       );
       return;
     }
@@ -847,122 +950,84 @@ function SigningKeyTile() {
         method: "POST",
         body: JSON.stringify(body),
       });
-      setOkMsg(status?.configured ? "Signing key rotated." : "Signing key installed.");
+      toast.success(status?.configured ? "Signing key rotated." : "Signing key installed.");
       setKeyText("");
       setSigText("");
       setOverride("");
       refresh();
     } catch (e) {
-      setErr(String(e));
+      setErr(String(e instanceof Error ? e.message : e));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="tile">
-      <h2>Signing key</h2>
-      {err && <div className="banner">{err}</div>}
-      {okMsg && (
-        <div
-          className="banner"
-          style={{
-            background: "rgba(79, 140, 255, 0.12)",
-            borderColor: "var(--accent)",
-            color: "var(--accent)",
-          }}
-        >
-          {okMsg}
-        </div>
-      )}
+    <SettingsCard icon={ShieldIcon} title="Signing key">
+      {err && <ErrorAlert message={err} onDismiss={() => setErr(null)} />}
       {!status ? (
-        "Loading…"
+        <p className="text-xs text-muted-foreground">Loading…</p>
       ) : status.configured ? (
-        <p>
-          Configured at <code>{status.path}</code>
+        <p className="text-xs">
+          Configured at <code className="rounded bg-muted px-1">{status.path}</code>
           {status.fingerprint && (
             <>
-              {" "}
-              · fingerprint <code>{status.fingerprint}</code>
+              {" · fingerprint "}
+              <code className="rounded bg-muted px-1">{status.fingerprint}</code>
             </>
           )}
-          . Releases without a matching <code>release.asc</code> asset will be refused.
+          . Releases without a matching <code className="rounded bg-muted px-1">release.asc</code>
+          {" "}asset will be refused.
         </p>
       ) : (
-        <p style={{ color: "var(--muted)" }}>
-          No signing key installed. The updater accepts unsigned tarballs until one is
-          configured here or at install time via <code>--signing-key</code>.
+        <p className="text-xs text-muted-foreground">
+          No signing key installed. The updater accepts unsigned tarballs until one is configured
+          here or at install time via <code className="rounded bg-muted px-1">--signing-key</code>.
         </p>
       )}
-      <label style={{ marginTop: "1rem", display: "block" }}>
-        New public key (ASCII-armored)
-      </label>
-      <textarea
-        rows={6}
-        value={keyText}
-        onChange={(e) => setKeyText(e.target.value)}
-        placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----&#10;…&#10;-----END PGP PUBLIC KEY BLOCK-----"
-        style={textareaStyle}
-      />
+      <Separator />
+      <Field label="New public key (ASCII-armored)">
+        <Textarea
+          rows={6}
+          value={keyText}
+          onChange={(e) => setKeyText(e.target.value)}
+          placeholder={"-----BEGIN PGP PUBLIC KEY BLOCK-----\n…\n-----END PGP PUBLIC KEY BLOCK-----"}
+          className="font-mono text-[11px]"
+        />
+      </Field>
       {status?.configured && (
         <>
-          <p style={{ color: "var(--muted)", marginTop: "1rem", fontSize: "0.85rem" }}>
-            Rotation: either paste a detached signature of the new key made with the old
-            key, or type the override phrase to disable verification for this rotation.
+          <p className="text-[10px] text-muted-foreground">
+            Rotation: either paste a detached signature of the new key made with the old key, or
+            type the override phrase to disable verification for this rotation.
           </p>
-          <label style={{ display: "block" }}>Detached signature (optional)</label>
-          <textarea
-            rows={5}
-            value={sigText}
-            onChange={(e) => setSigText(e.target.value)}
-            placeholder="-----BEGIN PGP SIGNATURE-----&#10;…&#10;-----END PGP SIGNATURE-----"
-            style={textareaStyle}
-          />
-          <label style={{ marginTop: "0.75rem", display: "block" }}>
-            Override (type the exact phrase to skip signature check)
-          </label>
-          <input
-            type="text"
-            value={override}
-            onChange={(e) => setOverride(e.target.value)}
-            placeholder={OVERRIDE_PHRASE}
-          />
+          <Field label="Detached signature (optional)">
+            <Textarea
+              rows={5}
+              value={sigText}
+              onChange={(e) => setSigText(e.target.value)}
+              placeholder={"-----BEGIN PGP SIGNATURE-----\n…\n-----END PGP SIGNATURE-----"}
+              className="font-mono text-[11px]"
+            />
+          </Field>
+          <Field
+            label="Override (type the exact phrase to skip signature check)"
+            hint={`Required if no detached signature is provided. Phrase: "${OVERRIDE_PHRASE}".`}
+          >
+            <Input
+              value={override}
+              onChange={(e) => setOverride(e.target.value)}
+              placeholder={OVERRIDE_PHRASE}
+            />
+          </Field>
         </>
       )}
-      <div className="row" style={{ marginTop: "1rem" }}>
-        <button className="primary" onClick={submit} disabled={busy || !keyText}>
+      <div className="flex items-center gap-2 pt-1">
+        <Button onClick={submit} disabled={busy || !keyText}>
+          <HugeiconsIcon icon={ShieldIcon} strokeWidth={2} />
           {status?.configured ? "Rotate key" : "Install key"}
-        </button>
+        </Button>
       </div>
-    </div>
+    </SettingsCard>
   );
 }
-
-const textareaStyle: CSSProperties = {
-  width: "100%",
-  background: "var(--bg)",
-  color: "var(--text)",
-  border: "1px solid var(--border)",
-  borderRadius: "0.4rem",
-  padding: "0.5rem",
-  fontFamily: "ui-monospace, monospace",
-  fontSize: "0.8rem",
-  boxSizing: "border-box",
-};
-
-const selectStyle: CSSProperties = {
-  width: "100%",
-  padding: "0.5rem",
-  background: "var(--bg)",
-  color: "var(--text)",
-  border: "1px solid var(--border)",
-  borderRadius: "0.4rem",
-  marginBottom: "0.75rem",
-};
-
-const checkboxLabel: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "0.5rem",
-  margin: "0.5rem 0",
-};

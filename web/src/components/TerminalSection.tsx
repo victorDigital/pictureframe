@@ -2,9 +2,43 @@ import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  Alert02Icon,
+  ComputerTerminal01Icon,
+  PlayIcon,
+  StopIcon,
+} from "@hugeicons/core-free-icons";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { getToken } from "../api.js";
+import { ErrorAlert } from "./common/ErrorAlert.js";
+import { PageHeader } from "./common/PageHeader.js";
 
 type Status = "idle" | "connecting" | "open" | "closed" | "error";
+
+const STATUS_VARIANT: Record<Status, "default" | "secondary" | "outline" | "destructive"> = {
+  idle: "outline",
+  connecting: "secondary",
+  open: "default",
+  closed: "outline",
+  error: "destructive",
+};
+
+const STATUS_LABEL: Record<Status, string> = {
+  idle: "Not started",
+  connecting: "Connecting…",
+  open: "Connected",
+  closed: "Disconnected",
+  error: "Error",
+};
 
 export function TerminalSection() {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -36,7 +70,7 @@ export function TerminalSection() {
   function start() {
     const token = getToken();
     if (!token) {
-      setErr("not signed in");
+      setErr("Not signed in");
       return;
     }
     const host = hostRef.current;
@@ -137,53 +171,56 @@ export function TerminalSection() {
   }
 
   return (
-    <div className="tile">
-      <h2>Terminal</h2>
-      <div
-        className="banner"
-        style={{
-          background: "rgba(255, 111, 111, 0.12)",
-          color: "var(--danger)",
-          marginBottom: "0.75rem",
-        }}
-      >
-        Warning: Shell access — opens an interactive bash as the <code>frame</code> user on
-        the device. The <code>frame</code> account has a narrow sudoers fragment
-        (<code>deploy/sudoers.d/frame</code>) that grants passwordless root for a small set
-        of commands; anyone holding the bearer token effectively has that same access.
-        Rotate the token after sharing.
-      </div>
-      {err && <div className="banner">{err}</div>}
-      <div className="row" style={{ marginBottom: "0.75rem" }}>
-        {!running ? (
-          <button className="primary" onClick={start}>
-            Start shell
-          </button>
-        ) : (
-          <button className="danger" onClick={stop}>
-            Disconnect
-          </button>
-        )}
-        <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
-          {status === "connecting" && "Connecting…"}
-          {status === "open" && "Connected"}
-          {status === "closed" && "Disconnected"}
-          {status === "error" && "Error"}
-          {status === "idle" && "Not started"}
-        </span>
-      </div>
-      <div
-        ref={hostRef}
-        style={{
-          width: "100%",
-          height: "28rem",
-          background: "#0c0d10",
-          border: "1px solid var(--border)",
-          borderRadius: "0.4rem",
-          padding: "0.5rem",
-          boxSizing: "border-box",
-        }}
+    <>
+      <PageHeader
+        title="Terminal"
+        description="Interactive bash session over WebSocket."
       />
-    </div>
+
+      <Alert variant="destructive">
+        <HugeiconsIcon icon={Alert02Icon} strokeWidth={2} />
+        <AlertTitle>Shell access</AlertTitle>
+        <AlertDescription>
+          Opens an interactive bash as the <code className="rounded bg-muted px-1">frame</code> user
+          on the device. The <code className="rounded bg-muted px-1">frame</code> account has a narrow
+          sudoers fragment (<code className="rounded bg-muted px-1">deploy/sudoers.d/frame</code>)
+          that grants passwordless root for a small set of commands; anyone holding the bearer token
+          effectively has that same access. Rotate the token after sharing.
+        </AlertDescription>
+      </Alert>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="flex items-center gap-2 text-muted-foreground">
+              <HugeiconsIcon icon={ComputerTerminal01Icon} strokeWidth={2} className="size-4" />
+              Session
+            </CardTitle>
+            <Badge variant={STATUS_VARIANT[status]}>{STATUS_LABEL[status]}</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {err && <ErrorAlert message={err} onDismiss={() => setErr(null)} />}
+          <div className="flex items-center gap-2">
+            {!running ? (
+              <Button onClick={start}>
+                <HugeiconsIcon icon={PlayIcon} strokeWidth={2} />
+                Start shell
+              </Button>
+            ) : (
+              <Button variant="destructive" onClick={stop}>
+                <HugeiconsIcon icon={StopIcon} strokeWidth={2} />
+                Disconnect
+              </Button>
+            )}
+          </div>
+          <div
+            ref={hostRef}
+            className="rounded-md border border-border/60 bg-[#0c0d10] p-2"
+            style={{ width: "100%", height: "28rem", boxSizing: "border-box" }}
+          />
+        </CardContent>
+      </Card>
+    </>
   );
 }

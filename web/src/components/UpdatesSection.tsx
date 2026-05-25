@@ -1,5 +1,28 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  ArrowReloadHorizontalIcon,
+  Cancel01Icon,
+  Download01Icon,
+  FlashIcon,
+  Loading03Icon,
+  RefreshIcon,
+  Alert02Icon,
+} from "@hugeicons/core-free-icons";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { api } from "../api.js";
+import { ConfirmButton } from "./common/ConfirmButton.js";
+import { ErrorAlert } from "./common/ErrorAlert.js";
+import { PageHeader } from "./common/PageHeader.js";
 
 type Snapshot = { from: string; to: string; at: string; name: string };
 type QuarantinedTag = { tag: string; at: string; reason: string };
@@ -32,7 +55,7 @@ export function UpdatesSection() {
       setSnapshots(snap.snapshots);
       setQuarantined(q.quarantined);
     } catch (e) {
-      setErr(String(e));
+      setErr(String(e instanceof Error ? e.message : e));
     }
   }
   useEffect(() => {
@@ -42,156 +65,253 @@ export function UpdatesSection() {
   }, []);
 
   async function clearQuarantine(tag?: string) {
-    const target = tag ? `/api/updates/quarantine/${encodeURIComponent(tag)}` : "/api/updates/quarantine";
-    if (!confirm(tag ? `Allow ${tag} to be retried?` : "Clear all quarantined releases?")) return;
-    await api(target, { method: "DELETE" });
-    refresh();
+    const target = tag
+      ? `/api/updates/quarantine/${encodeURIComponent(tag)}`
+      : "/api/updates/quarantine";
+    try {
+      await api(target, { method: "DELETE" });
+      toast.success(tag ? `Cleared ${tag}` : "Quarantine cleared");
+      refresh();
+    } catch (e) {
+      toast.error(`Clear failed: ${e instanceof Error ? e.message : e}`);
+    }
   }
 
   async function check() {
     setBusy(true);
-    await api("/api/updates/check", { method: "POST" });
-    setBusy(false);
-    refresh();
+    try {
+      await api("/api/updates/check", { method: "POST" });
+      toast.success("Update check kicked off");
+    } catch (e) {
+      toast.error(`Check failed: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setBusy(false);
+      refresh();
+    }
   }
 
   async function apply(force: boolean) {
-    if (!confirm(force ? "Force apply, overriding staging delay?" : "Apply now?")) return;
     setBusy(true);
     try {
-      await api(force ? "/api/updates/apply_force" : "/api/updates/apply", { method: "POST" });
+      await api(force ? "/api/updates/apply_force" : "/api/updates/apply", {
+        method: "POST",
+      });
+      toast.success(force ? "Force-apply started" : "Apply started");
     } catch (e) {
-      setErr(String(e));
+      toast.error(`Apply failed: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setBusy(false);
+      refresh();
     }
-    setBusy(false);
-    refresh();
   }
 
   async function rollback() {
-    if (!confirm("Roll back to the previous release? Config snapshots will be restored.")) return;
     setBusy(true);
-    await api("/api/updates/rollback", { method: "POST" });
-    setBusy(false);
-    refresh();
+    try {
+      await api("/api/updates/rollback", { method: "POST" });
+      toast.success("Rollback started");
+    } catch (e) {
+      toast.error(`Rollback failed: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setBusy(false);
+      refresh();
+    }
   }
 
-  if (err) return <div className="banner">{err}</div>;
-  if (!status) return <div className="tile">Loading…</div>;
+  if (err && !status) return <ErrorAlert message={err} onDismiss={() => setErr(null)} />;
+
+  if (!status) {
+    return (
+      <Card>
+        <CardContent className="flex items-center gap-2 py-6 text-muted-foreground">
+          <HugeiconsIcon icon={Loading03Icon} strokeWidth={2} className="animate-spin" />
+          Loading…
+        </CardContent>
+      </Card>
+    );
+  }
 
   const appliedAfter = status.available ? new Date(status.available.appliedAfter) : null;
   const stagingActive = appliedAfter && appliedAfter > new Date();
 
   return (
     <>
-    <div className="tile">
-      <h2>Updates</h2>
-      <div>
-        Current: <strong>{status.current}</strong> · channel <code>{status.channel}</code>
-        {status.autoApply ? " · auto-apply on" : ""}
-      </div>
-      <div style={{ marginTop: "0.5rem" }}>
-        {status.available ? (
-          <>
-            Available: <strong>{status.available.tag}</strong>{" "}
-            {status.available.prerelease && <em>(prerelease)</em>}
-            <div style={{ color: "var(--muted)" }}>
-              first seen {new Date(status.available.firstSeenAt).toLocaleString()} · applies after{" "}
-              {appliedAfter?.toLocaleString()}
-            </div>
-          </>
-        ) : (
-          <span style={{ color: "var(--muted)" }}>No newer release on this channel.</span>
-        )}
-      </div>
-      <div className="row" style={{ marginTop: "1rem" }}>
-        <button className="secondary" onClick={check} disabled={busy}>Check now</button>
-        <button
-          className="primary"
-          disabled={!status.available || busy || Boolean(stagingActive)}
-          onClick={() => apply(false)}
-        >
-          Update now
-        </button>
-        <button
-          className="secondary"
-          disabled={!status.available || busy}
-          onClick={() => apply(true)}
-          title="Override staging delay"
-        >
-          Force update now
-        </button>
-        <button className="danger" onClick={rollback} disabled={busy} style={{ marginLeft: "auto" }}>
-          Roll back
-        </button>
-      </div>
-      {status.lastResult && (
-        <div style={{ marginTop: "1rem", color: "var(--muted)" }}>
-          Last result: {status.lastResult}
-          {status.lastError && ` — ${status.lastError}`}
-        </div>
-      )}
-    </div>
+      <PageHeader
+        title="Updates"
+        description={`Channel ${status.channel}${status.autoApply ? " · auto-apply on" : ""}`}
+        actions={
+          <Button variant="outline" size="sm" onClick={check} disabled={busy}>
+            <HugeiconsIcon icon={RefreshIcon} strokeWidth={2} />
+            Check now
+          </Button>
+        }
+      />
 
-    <div className="tile">
-      <h2>Quarantined releases</h2>
-      {quarantined.length === 0 ? (
-        <p style={{ color: "var(--muted)" }}>
-          No releases are quarantined. Failed applies land here and are skipped by the
-          poller until cleared (SPEC §5.5).
-        </p>
-      ) : (
-        <>
-          {quarantined.map((q) => (
-            <div
-              key={q.tag}
-              className="row"
-              style={{ borderTop: "1px solid var(--border)", padding: "0.5rem 0" }}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-muted-foreground">
+            <HugeiconsIcon icon={Download01Icon} strokeWidth={2} className="size-4" />
+            Release
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-[8rem_1fr] gap-y-1 text-xs">
+            <span className="text-muted-foreground">Current</span>
+            <span className="font-mono font-medium">{status.current}</span>
+            <span className="text-muted-foreground">Channel</span>
+            <span><Badge variant="outline">{status.channel}</Badge></span>
+          </div>
+          {status.available ? (
+            <div className="rounded-md border border-primary/30 bg-primary/5 p-3 space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Available</span>
+                <span className="font-mono font-medium">{status.available.tag}</span>
+                {status.available.prerelease && (
+                  <Badge variant="secondary">prerelease</Badge>
+                )}
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                first seen {new Date(status.available.firstSeenAt).toLocaleString()} · applies after{" "}
+                {appliedAfter?.toLocaleString()}
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">No newer release on this channel.</p>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <ConfirmButton
+              title="Apply update now?"
+              description={
+                status.available
+                  ? `Frame will restart onto ${status.available.tag}. Config is snapshotted automatically.`
+                  : undefined
+              }
+              confirmLabel="Apply"
+              disabled={!status.available || busy || Boolean(stagingActive)}
+              onConfirm={() => apply(false)}
             >
-              <div>
-                <div><strong>{q.tag}</strong></div>
-                <div style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
-                  {new Date(q.at).toLocaleString()} — {q.reason}
-                </div>
-              </div>
-              <div style={{ marginLeft: "auto" }}>
-                <button className="secondary" onClick={() => clearQuarantine(q.tag)}>
-                  Clear
-                </button>
-              </div>
-            </div>
-          ))}
-          <div className="row" style={{ marginTop: "0.75rem" }}>
-            <button className="danger" onClick={() => clearQuarantine()}>
-              Clear all
-            </button>
+              <HugeiconsIcon icon={Download01Icon} strokeWidth={2} />
+              Update now
+            </ConfirmButton>
+            <ConfirmButton
+              variant="outline"
+              destructive
+              title="Force apply now?"
+              description="Skips the staging delay. Only do this if you understand the risk."
+              confirmLabel="Force apply"
+              disabled={!status.available || busy}
+              onConfirm={() => apply(true)}
+            >
+              <HugeiconsIcon icon={FlashIcon} strokeWidth={2} />
+              Force update
+            </ConfirmButton>
+            <ConfirmButton
+              variant="destructive"
+              destructive
+              className="ml-auto"
+              title="Roll back to previous release?"
+              description="Config snapshots will be restored. Frame restarts onto the prior version."
+              confirmLabel="Roll back"
+              disabled={busy}
+              onConfirm={rollback}
+            >
+              <HugeiconsIcon icon={ArrowReloadHorizontalIcon} strokeWidth={2} />
+              Roll back
+            </ConfirmButton>
           </div>
-        </>
-      )}
-    </div>
+          {status.lastResult && (
+            <p className="text-xs text-muted-foreground">
+              Last result: <span className="text-foreground">{status.lastResult}</span>
+              {status.lastError && ` — ${status.lastError}`}
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
-    <div className="tile">
-      <h2>Snapshots</h2>
-      {snapshots.length === 0 ? (
-        <p style={{ color: "var(--muted)" }}>No snapshots yet — they're created on apply.</p>
-      ) : (
-        snapshots.map((s) => (
-          <div
-            key={s.name}
-            className="row"
-            style={{ borderTop: "1px solid var(--border)", padding: "0.5rem 0" }}
-          >
-            <div>
-              <div>
-                <code>{s.from}</code> → <code>{s.to}</code>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-muted-foreground">
+            <HugeiconsIcon icon={Alert02Icon} strokeWidth={2} className="size-4" />
+            Quarantined releases
+          </CardTitle>
+          <CardDescription>
+            Failed applies land here and are skipped by the poller until cleared (SPEC §5.5).
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {quarantined.length === 0 ? (
+            <p className="py-2 text-xs text-muted-foreground">No releases are quarantined.</p>
+          ) : (
+            <div className="space-y-2">
+              <div className="divide-y divide-border/60">
+                {quarantined.map((q) => (
+                  <div
+                    key={q.tag}
+                    className="flex items-center gap-3 py-2 first:pt-0"
+                  >
+                    <div className="flex-1">
+                      <div className="font-mono font-medium">{q.tag}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {new Date(q.at).toLocaleString()} — {q.reason}
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => clearQuarantine(q.tag)}
+                    >
+                      <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
+                      Clear
+                    </Button>
+                  </div>
+                ))}
               </div>
-              <div style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
-                {new Date(s.at).toLocaleString()}
-              </div>
+              <ConfirmButton
+                variant="destructive"
+                size="sm"
+                destructive
+                title="Clear all quarantined releases?"
+                description="The poller will retry every quarantined tag on its next cycle."
+                confirmLabel="Clear all"
+                onConfirm={() => clearQuarantine()}
+              >
+                Clear all
+              </ConfirmButton>
             </div>
-          </div>
-        ))
-      )}
-    </div>
-  </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-muted-foreground">Snapshots</CardTitle>
+          <CardDescription>Config snapshots created on each apply.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {snapshots.length === 0 ? (
+            <p className="py-2 text-xs text-muted-foreground">
+              No snapshots yet — they're created on apply.
+            </p>
+          ) : (
+            <div className="divide-y divide-border/60">
+              {snapshots.map((s) => (
+                <div key={s.name} className="flex items-center gap-3 py-2 first:pt-0">
+                  <div className="flex-1">
+                    <div className="font-mono text-xs">
+                      <code>{s.from}</code>
+                      <span className="mx-1 text-muted-foreground">→</span>
+                      <code>{s.to}</code>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {new Date(s.at).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </>
   );
 }

@@ -1,5 +1,26 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  ArrowExpand01Icon,
+  ComputerIcon,
+  Loading03Icon,
+  PlayIcon,
+  StopIcon,
+  ViewIcon,
+  ViewOffIcon,
+} from "@hugeicons/core-free-icons";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { api } from "../api.js";
+import { ErrorAlert } from "./common/ErrorAlert.js";
+import { PageHeader } from "./common/PageHeader.js";
 
 type VncStatus = {
   running: boolean;
@@ -19,7 +40,7 @@ export function VncSection() {
     try {
       setStatus(await api<VncStatus>("/api/vnc/status"));
     } catch (e) {
-      setErr(String(e));
+      setErr(String(e instanceof Error ? e.message : e));
     }
   }
   useEffect(() => {
@@ -34,8 +55,9 @@ export function VncSection() {
       const s = await api<VncStatus>("/api/vnc/start", { method: "POST" });
       setStatus(s);
       setShow(true);
+      toast.success("VNC started");
     } catch (e) {
-      setErr(String(e));
+      setErr(String(e instanceof Error ? e.message : e));
     } finally {
       setBusy(false);
     }
@@ -44,9 +66,15 @@ export function VncSection() {
   async function stop() {
     setBusy(true);
     setShow(false);
-    await api("/api/vnc/stop", { method: "POST" });
-    setBusy(false);
-    refresh();
+    try {
+      await api("/api/vnc/stop", { method: "POST" });
+      toast.success("VNC stopped");
+    } catch (e) {
+      toast.error(`Stop failed: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setBusy(false);
+      refresh();
+    }
   }
 
   const vncUrl =
@@ -55,70 +83,83 @@ export function VncSection() {
       : null;
 
   return (
-    <div className="tile">
-      <h2>Remote screen (VNC)</h2>
-      {err && <div className="banner">{err}</div>}
-      {!status ? (
-        "Loading…"
-      ) : status.running ? (
-        <>
-          <p style={{ color: "var(--muted)" }}>
-            Running since {new Date(status.startedAt!).toLocaleString()}. Auto-stops after
-            15 min idle (SPEC §8.3).
-          </p>
-          <div className="row" style={{ marginBottom: "1rem" }}>
-            <button className="primary" onClick={() => setShow((v) => !v)}>
-              {show ? "Hide viewer" : "Open viewer"}
-            </button>
-            <a
-              className="secondary"
-              href={vncUrl ?? "#"}
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                background: "transparent",
-                border: "1px solid var(--border)",
-                color: "var(--text)",
-                padding: "0.4rem 0.9rem",
-                borderRadius: "0.4rem",
-                textDecoration: "none",
-              }}
-            >
-              Open in new tab
-            </a>
-            <button className="danger" onClick={stop} disabled={busy} style={{ marginLeft: "auto" }}>
-              Stop
-            </button>
-          </div>
-          {show && vncUrl && (
-            <iframe
-              src={vncUrl}
-              title="VNC viewer"
-              style={{
-                width: "100%",
-                aspectRatio: "16 / 10",
-                border: "1px solid var(--border)",
-                borderRadius: "0.4rem",
-                background: "#000",
-              }}
-              allow="clipboard-read; clipboard-write"
-            />
+    <>
+      <PageHeader
+        title="Remote screen (VNC)"
+        description="On-demand wayvnc + websockify for live viewing of the device."
+      />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-muted-foreground">
+            <HugeiconsIcon icon={ComputerIcon} strokeWidth={2} className="size-4" />
+            Session
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {err && <ErrorAlert message={err} onDismiss={() => setErr(null)} />}
+          {!status ? (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <HugeiconsIcon icon={Loading03Icon} strokeWidth={2} className="animate-spin" />
+              Loading…
+            </div>
+          ) : status.running ? (
+            <>
+              <CardDescription>
+                Running since {new Date(status.startedAt!).toLocaleString()}. Auto-stops after
+                15 min idle (SPEC §8.3).
+              </CardDescription>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button onClick={() => setShow((v) => !v)}>
+                  <HugeiconsIcon
+                    icon={show ? ViewOffIcon : ViewIcon}
+                    strokeWidth={2}
+                  />
+                  {show ? "Hide viewer" : "Open viewer"}
+                </Button>
+                <Button variant="outline" asChild>
+                  <a href={vncUrl ?? "#"} target="_blank" rel="noreferrer">
+                    <HugeiconsIcon icon={ArrowExpand01Icon} strokeWidth={2} />
+                    Open in new tab
+                  </a>
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={stop}
+                  disabled={busy}
+                  className="ml-auto"
+                >
+                  <HugeiconsIcon icon={StopIcon} strokeWidth={2} />
+                  Stop
+                </Button>
+              </div>
+              {show && vncUrl && (
+                <iframe
+                  src={vncUrl}
+                  title="VNC viewer"
+                  allow="clipboard-read; clipboard-write"
+                  className="w-full rounded-md border border-border/60 bg-black"
+                  style={{ aspectRatio: "16 / 10" }}
+                />
+              )}
+            </>
+          ) : (
+            <>
+              <CardDescription>
+                Starts wayvnc and websockify on demand. The bundled noVNC client connects to{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
+                  ws://{location.hostname}:{status.wsPort}
+                </code>
+                ; nothing runs while idle.
+              </CardDescription>
+              <Button onClick={start} disabled={busy}>
+                <HugeiconsIcon icon={PlayIcon} strokeWidth={2} />
+                Start VNC
+              </Button>
+            </>
           )}
-        </>
-      ) : (
-        <>
-          <p>
-            Starts wayvnc and websockify on demand. The bundled noVNC client connects to
-            <code style={{ marginLeft: "0.25rem" }}>
-              ws://{location.hostname}:{status.wsPort}
-            </code>
-            ; nothing runs while idle.
-          </p>
-          <button className="primary" onClick={start} disabled={busy}>
-            Start VNC
-          </button>
-        </>
-      )}
-    </div>
+        </CardContent>
+      </Card>
+    </>
   );
 }
