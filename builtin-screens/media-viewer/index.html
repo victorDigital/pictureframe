@@ -3,44 +3,165 @@
   <head>
     <meta charset="utf-8" />
     <title>Media viewer</title>
-    <style>
-      :root { color-scheme: dark; }
-      html, body { margin: 0; height: 100%; background: #000; color: #ccc; font-family: ui-sans-serif, system-ui, sans-serif; overflow: hidden; }
-      .stage { position: fixed; inset: 0; display: grid; place-items: center; }
-      .stage > * {
-        max-width: 100%; max-height: 100%;
-        width: 100%; height: 100%;
-        object-fit: var(--fit, contain);
-        transition: opacity 800ms ease;
-      }
-      .err { position: fixed; inset: 0; display: grid; place-items: center; color: #ff9b9b; font-size: 1.5rem; }
-    </style>
+    <link rel="stylesheet" href="/builtin/_shared/style.css" />
   </head>
-  <body>
-    <div class="stage" id="stage"></div>
-    <div class="err" id="err" style="display:none"></div>
-    <script>
-      const params = new URLSearchParams(location.search);
-      let config = {};
-      try { config = JSON.parse(params.get("config") || "{}"); } catch (e) {}
-      document.documentElement.style.setProperty("--fit", config.fit || "contain");
-      const interval = (config.interval_sec || 15) * 1000;
-      const stage = document.getElementById("stage");
+  <body class="bg-background text-foreground overflow-hidden">
+    <div
+      id="shell"
+      class="fixed inset-0 flex flex-col overflow-hidden opacity-0 transition-opacity duration-700 ease-out"
+    >
+      <div class="relative min-h-0 flex-1 overflow-hidden">
+        <div
+          id="media-host"
+          class="absolute inset-0 grid place-items-center bg-black"
+        ></div>
+
+        <div
+          id="caption-overlay"
+          class="pointer-events-none absolute inset-x-0 bottom-0 hidden justify-center px-6 py-4"
+        >
+          <p
+            id="caption-overlay-text"
+            class="max-w-2xl truncate rounded-lg border border-border bg-card px-4 py-3 text-center text-lg font-medium leading-snug text-card-foreground backdrop-blur-sm"
+          ></p>
+        </div>
+
+        <div
+          id="dots"
+          class="pointer-events-none absolute inset-x-0 bottom-0 hidden justify-center gap-2 px-6 py-4"
+        ></div>
+      </div>
+
+      <footer
+        id="caption-bottom"
+        class="hidden shrink-0 border-t border-border bg-card px-6 py-4"
+      >
+        <p
+          id="caption-bottom-text"
+          class="truncate text-center text-lg font-medium text-card-foreground"
+        ></p>
+      </footer>
+    </div>
+
+    <div
+      id="err"
+      class="fixed inset-0 hidden place-items-center p-8 text-center text-destructive"
+    >
+      <p id="err-text" class="max-w-2xl text-2xl font-medium leading-snug"></p>
+    </div>
+
+    <script type="module">
+      import { init, fetchWithTimeout } from "/builtin/_shared/runtime.js";
+
+      const config = init("media-viewer");
+
+      const fitMode = config.fit_mode ?? config.fit ?? "contain";
+      const fitClass = fitMode === "cover" ? "object-cover" : "object-contain";
+      const intervalMs = (config.interval_sec ?? 15) * 1000;
+      const captionPosition = config.caption_position ?? "bottom";
+      const showDots = config.show_progress_dots !== false;
+
+      const shell = document.getElementById("shell");
+      const mediaHost = document.getElementById("media-host");
+      const captionBottom = document.getElementById("caption-bottom");
+      const captionBottomText = document.getElementById("caption-bottom-text");
+      const captionOverlay = document.getElementById("caption-overlay");
+      const captionOverlayText = document.getElementById("caption-overlay-text");
+      const dotsRoot = document.getElementById("dots");
       const err = document.getElementById("err");
+      const errText = document.getElementById("err-text");
+
+      const VIDEO_EXT = new Set(["mp4", "webm", "mov", "m4v"]);
+
+      if (captionPosition === "bottom") {
+        captionBottom.classList.remove("hidden");
+        captionBottom.classList.add("block");
+      }
+
+      function ext(url) {
+        return url.split("?")[0].split(".").pop().toLowerCase();
+      }
+
+      function captionFromUrl(url) {
+        try {
+          const name = decodeURIComponent(url.split("/").pop().split("?")[0]);
+          const base = name.replace(/\.[^.]+$/, "");
+          return base.replace(/[-_]+/g, " ").trim();
+        } catch {
+          return "";
+        }
+      }
+
+      function normalizeItem(entry) {
+        if (typeof entry === "string") {
+          return { url: entry, caption: captionFromUrl(entry) };
+        }
+        if (entry && typeof entry === "object") {
+          const url = entry.url || entry.src || entry.href || "";
+          const caption =
+            entry.caption || entry.title || entry.name || captionFromUrl(url);
+          return { url, caption };
+        }
+        return { url: "", caption: "" };
+      }
+
+      function showError(message) {
+        errText.textContent = message;
+        err.classList.remove("hidden");
+        err.classList.add("grid");
+        shell.classList.add("hidden");
+      }
+
+      function setCaption(text) {
+        const value = text || "";
+        const visible = captionPosition !== "none" && value.length > 0;
+        captionBottomText.textContent = value;
+        captionOverlayText.textContent = value;
+        captionBottom.classList.toggle("hidden", !visible || captionPosition !== "bottom");
+        captionBottom.classList.toggle("block", visible && captionPosition === "bottom");
+        captionOverlay.classList.toggle("hidden", !visible || captionPosition !== "overlay");
+        captionOverlay.classList.toggle("flex", visible && captionPosition === "overlay");
+      }
+
+      function renderDots(count, activeIndex) {
+        dotsRoot.innerHTML = "";
+        if (!showDots || count <= 1) {
+          dotsRoot.classList.add("hidden");
+          dotsRoot.classList.remove("flex");
+          return;
+        }
+        dotsRoot.classList.remove("hidden");
+        dotsRoot.classList.add("flex");
+        for (let i = 0; i < count; i++) {
+          const dot = document.createElement("span");
+          dot.className =
+            "h-2 w-2 rounded-full transition-all duration-300 " +
+            (i === activeIndex ? "bg-primary" : "bg-muted opacity-50");
+          dotsRoot.appendChild(dot);
+        }
+      }
 
       async function loadList() {
-        const r = await fetch(config.index_url);
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        return r.json();
+        if (!config.index_url) throw new Error("Configure index_url");
+        const res = await fetchWithTimeout(config.index_url);
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const raw = await res.json();
+        if (!Array.isArray(raw)) throw new Error("Index must be a JSON array");
+        return raw.map(normalizeItem).filter((item) => item.url);
       }
 
-      function ext(url) { return url.split("?")[0].split(".").pop().toLowerCase(); }
-      const VIDEO = new Set(["mp4", "webm", "mov", "m4v"]);
+      let advanceTimer = null;
 
-      function show(url) {
-        stage.innerHTML = "";
+      function clearAdvanceTimer() {
+        if (advanceTimer) clearTimeout(advanceTimer);
+        advanceTimer = null;
+      }
+
+      function showMedia(item) {
+        mediaHost.innerHTML = "";
+        const isVideo = VIDEO_EXT.has(ext(item.url));
         let el;
-        if (VIDEO.has(ext(url))) {
+        if (isVideo) {
           el = document.createElement("video");
           el.autoplay = true;
           el.muted = true;
@@ -48,35 +169,67 @@
           el.loop = false;
         } else {
           el = document.createElement("img");
+          el.alt = item.caption || "";
         }
-        el.src = url;
-        el.style.opacity = "0";
-        stage.appendChild(el);
-        requestAnimationFrame(() => { el.style.opacity = "1"; });
+        el.src = item.url;
+        el.className =
+          "h-full w-full opacity-0 transition-opacity duration-700 ease-out " +
+          fitClass;
+        mediaHost.appendChild(el);
+        requestAnimationFrame(() => {
+          el.classList.remove("opacity-0");
+          el.classList.add("opacity-100");
+        });
+        setCaption(item.caption);
+        return { el, isVideo };
       }
 
       async function run() {
         let list;
-        try { list = await loadList(); }
-        catch (e) {
-          err.textContent = String(e);
-          err.style.display = "grid";
+        try {
+          list = await loadList();
+        } catch (e) {
+          showError(String(e));
           return;
         }
+
         if (!list.length) {
-          err.textContent = "No media in directory.";
-          err.style.display = "grid";
+          showError("No media in directory.");
           return;
         }
-        let i = 0;
-        show(list[0]);
-        setInterval(() => {
-          i = (i + 1) % list.length;
-          show(list[i]);
-        }, interval);
+
+        shell.classList.remove("opacity-0");
+        shell.classList.add("opacity-100");
+
+        let index = 0;
+
+        function goTo(nextIndex) {
+          clearAdvanceTimer();
+          index = ((nextIndex % list.length) + list.length) % list.length;
+          const item = list[index];
+          const { el, isVideo } = showMedia(item);
+          renderDots(list.length, index);
+
+          const advance = () => goTo(index + 1);
+
+          if (isVideo) {
+            el.addEventListener(
+              "ended",
+              () => {
+                advanceTimer = setTimeout(advance, 400);
+              },
+              { once: true },
+            );
+            advanceTimer = setTimeout(advance, Math.max(intervalMs, 3000));
+          } else {
+            advanceTimer = setTimeout(advance, intervalMs);
+          }
+        }
+
+        goTo(0);
       }
+
       run();
-      parent.postMessage({ type: "builtin_ready", id: "media-viewer" }, "*");
     </script>
   </body>
 </html>
