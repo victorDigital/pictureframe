@@ -1,14 +1,52 @@
 {
   "id": "media-viewer",
   "name": "Media viewer",
-  "description": "Cycles through images/videos served by a directory on the LAN. Expects an index URL returning a JSON array of asset URLs.",
+  "description": "Cycles through images and videos from a LAN directory index. Expects index_url to return a JSON array of asset URLs or {url, caption?} objects.",
   "config_schema": {
     "type": "object",
     "required": ["index_url"],
     "properties": {
-      "index_url": { "type": "string" },
-      "interval_sec": { "type": "integer", "minimum": 3, "default": 15 },
-      "fit": { "type": "string", "enum": ["cover", "contain"], "default": "contain" }
+      "theme": {
+        "type": "string",
+        "enum": ["auto", "light", "dark", "midnight"],
+        "default": "auto",
+        "description": "Color theme"
+      },
+      "font_scale": {
+        "type": "number",
+        "minimum": 0.5,
+        "maximum": 2,
+        "default": 1,
+        "format": "range",
+        "description": "Scale caption typography"
+      },
+      "index_url": {
+        "type": "string",
+        "description": "URL returning a JSON array of media URLs or objects"
+      },
+      "interval_sec": {
+        "type": "integer",
+        "minimum": 3,
+        "default": 15,
+        "description": "Seconds between slides (images; minimum dwell for videos)"
+      },
+      "fit_mode": {
+        "type": "string",
+        "enum": ["cover", "contain"],
+        "default": "contain",
+        "description": "How media fills the frame"
+      },
+      "caption_position": {
+        "type": "string",
+        "enum": ["bottom", "overlay", "none"],
+        "default": "bottom",
+        "description": "Where to show the filename or caption"
+      },
+      "show_progress_dots": {
+        "type": "boolean",
+        "default": true,
+        "description": "Show slide position dots when multiple items"
+      }
     }
   }
 }

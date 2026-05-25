@@ -5,8 +5,61 @@
   "config_schema": {
     "type": "object",
     "properties": {
-      "blur_background": { "type": "boolean", "default": true },
-      "show_progress": { "type": "boolean", "default": true }
+      "theme": {
+        "type": "string",
+        "enum": ["auto", "light", "dark", "midnight"],
+        "default": "auto",
+        "description": "Color scheme. Auto follows the device/OS preference."
+      },
+      "font_scale": {
+        "type": "number",
+        "minimum": 0.5,
+        "maximum": 2,
+        "format": "range",
+        "default": 1,
+        "description": "Scale all typography (0.5×–2×)."
+      },
+      "font_family": {
+        "type": "string",
+        "enum": ["geist", "system", "serif", "mono"],
+        "default": "geist",
+        "description": "Typeface for track title, artist, and album."
+      },
+      "accent_color": {
+        "type": "string",
+        "format": "color",
+        "description": "Progress bar accent when accent_source is custom. Leave empty for theme default."
+      },
+      "layout": {
+        "type": "string",
+        "enum": ["split", "stacked", "minimal"],
+        "default": "split",
+        "description": "How album art and track metadata are arranged."
+      },
+      "accent_source": {
+        "type": "string",
+        "enum": ["art", "primary", "custom"],
+        "default": "art",
+        "description": "Progress bar color: sampled from album art, theme primary, or accent_color."
+      },
+      "blur_background": {
+        "type": "boolean",
+        "default": true,
+        "description": "Show a blurred album-art backdrop behind the panel."
+      },
+      "blur_amount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 96,
+        "format": "range",
+        "default": 48,
+        "description": "Backdrop blur radius in pixels when blur_background is enabled."
+      },
+      "show_progress": {
+        "type": "boolean",
+        "default": true,
+        "description": "Show an elapsed-time progress bar under the track info."
+      }
     }
   }
 }
