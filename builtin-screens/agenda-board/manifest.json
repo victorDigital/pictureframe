@@ -6,6 +6,32 @@
     "type": "object",
     "required": ["latitude", "longitude"],
     "properties": {
+      "theme": {
+        "type": "string",
+        "enum": ["auto", "light", "dark", "midnight"],
+        "default": "auto",
+        "description": "Color scheme. Auto follows the device/OS preference."
+      },
+      "font_scale": {
+        "type": "number",
+        "minimum": 0.5,
+        "maximum": 2,
+        "format": "range",
+        "default": 1,
+        "description": "Scale all typography (0.5×–2×)."
+      },
+      "font_family": {
+        "type": "string",
+        "enum": ["geist", "system", "serif", "mono"],
+        "default": "geist",
+        "description": "Typeface for time, weather, and agenda text."
+      },
+      "layout": {
+        "type": "string",
+        "enum": ["split-2", "split-3", "stacked"],
+        "default": "split-2",
+        "description": "split-2: clock and weather header with agenda below; split-3: three columns; stacked: vertical stack."
+      },
       "latitude": { "type": "number" },
       "longitude": { "type": "number" },
       "location_label": { "type": "string", "default": "" },
