@@ -4,12 +4,89 @@
   "description": "Agenda from a public iCal/ICS feed. For CalDAV, run a small proxy that exposes the user calendar as ICS (e.g. via Radicale's read URL). For Google Calendar, use the public ICS export.",
   "config_schema": {
     "type": "object",
-    "required": ["ical_url"],
+    "required": [
+      "ical_url"
+    ],
     "properties": {
-      "ical_url": { "type": "string" },
-      "title": { "type": "string", "default": "Upcoming" },
-      "horizon_days": { "type": "integer", "minimum": 1, "maximum": 30, "default": 14 },
-      "max_events": { "type": "integer", "minimum": 1, "maximum": 50, "default": 12 }
+      "ical_url": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string",
+        "default": "Upcoming"
+      },
+      "horizon_days": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 30,
+        "default": 14
+      },
+      "max_events": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 50,
+        "default": 12
+      },
+      "theme": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "light",
+          "dark",
+          "midnight"
+        ],
+        "default": "auto"
+      },
+      "font_scale": {
+        "type": "number",
+        "minimum": 0.5,
+        "maximum": 2,
+        "default": 1,
+        "format": "range"
+      },
+      "font_family": {
+        "type": "string",
+        "enum": [
+          "geist",
+          "system",
+          "serif",
+          "mono"
+        ],
+        "default": "geist"
+      },
+      "layout": {
+        "type": "string",
+        "enum": [
+          "agenda",
+          "grid",
+          "compact"
+        ],
+        "default": "agenda",
+        "description": "agenda: day groups; grid: day columns; compact: flat dense list"
+      },
+      "density": {
+        "type": "string",
+        "enum": [
+          "comfortable",
+          "compact"
+        ],
+        "default": "comfortable"
+      },
+      "group_by_day": {
+        "type": "boolean",
+        "default": true,
+        "description": "Group events under day headings (agenda and grid layouts)"
+      },
+      "all_day_handling": {
+        "type": "string",
+        "enum": [
+          "inline",
+          "badge",
+          "section"
+        ],
+        "default": "inline",
+        "description": "inline: time column label; badge: pill on title; section: separate all-day block per day"
+      }
     }
   }
 }
