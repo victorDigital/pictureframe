@@ -2,85 +2,22 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Ambient</title>
-    <style>
-      :root { color-scheme: dark; }
-      html, body { margin: 0; height: 100%; background: #000; color: #fff; font-family: ui-sans-serif, system-ui, sans-serif; overflow: hidden; }
-      canvas { position: fixed; inset: 0; width: 100%; height: 100%; }
-      .clock { position: fixed; inset: 0; display: grid; place-items: center; pointer-events: none; }
-      .clock .face { font-size: clamp(4rem, 12vw, 14rem); font-weight: 100; color: rgba(255,255,255,0.6); font-variant-numeric: tabular-nums; letter-spacing: -0.04em; }
-    </style>
+    <link rel="stylesheet" href="/builtin/_shared/style.css" />
   </head>
-  <body>
-    <canvas id="cv"></canvas>
-    <div class="clock"><div class="face" id="clock"></div></div>
-    <script>
-      const params = new URLSearchParams(location.search);
-      let config = {};
-      try { config = JSON.parse(params.get("config") || "{}"); } catch (e) {}
-      const palettes = {
-        midnight: ["#021029", "#0a3358", "#3b6da6", "#75aede"],
-        embers:   ["#1a0500", "#5a1100", "#a83a16", "#f0b264"],
-        aurora:   ["#001a1f", "#003d3b", "#19a98c", "#7be0b6"]
-      };
-      const palette = palettes[config.palette || "midnight"];
-      const cv = document.getElementById("cv");
-      const ctx = cv.getContext("2d");
+  <body class="screen-root bg-black">
+    <canvas id="cv" class="fixed inset-0 z-0 size-full" aria-hidden="true"></canvas>
+    <div id="clock" class="hidden"></div>
 
-      function resize() {
-        cv.width = window.innerWidth * devicePixelRatio;
-        cv.height = window.innerHeight * devicePixelRatio;
-        ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
-      }
-      resize();
-      window.addEventListener("resize", resize);
+    <script type="module">
+      import { init } from "/builtin/_shared/runtime.js";
+      import { startAmbient, startClock } from "./assets/ambient.js";
 
-      const W = () => window.innerWidth;
-      const H = () => window.innerHeight;
+      const config = init("ambient");
 
-      const blobs = Array.from({ length: 7 }, (_, i) => ({
-        x: Math.random() * W(),
-        y: Math.random() * H(),
-        vx: (Math.random() - 0.5) * 0.25,
-        vy: (Math.random() - 0.5) * 0.25,
-        r: W() * (0.25 + Math.random() * 0.3),
-        c: palette[(i % (palette.length - 1)) + 1]
-      }));
-
-      function frame() {
-        ctx.fillStyle = palette[0];
-        ctx.fillRect(0, 0, W(), H());
-        ctx.globalCompositeOperation = "lighter";
-        for (const b of blobs) {
-          b.x += b.vx; b.y += b.vy;
-          if (b.x < -b.r) b.vx = Math.abs(b.vx);
-          if (b.x > W() + b.r) b.vx = -Math.abs(b.vx);
-          if (b.y < -b.r) b.vy = Math.abs(b.vy);
-          if (b.y > H() + b.r) b.vy = -Math.abs(b.vy);
-          const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
-          g.addColorStop(0, b.c + "aa");
-          g.addColorStop(1, b.c + "00");
-          ctx.fillStyle = g;
-          ctx.beginPath();
-          ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.globalCompositeOperation = "source-over";
-        requestAnimationFrame(frame);
-      }
-      frame();
-
-      if (config.show_clock !== false) {
-        const c = document.getElementById("clock");
-        function tick() {
-          const n = new Date();
-          c.textContent = String(n.getHours()).padStart(2, "0") + ":" + String(n.getMinutes()).padStart(2, "0");
-        }
-        tick();
-        setInterval(tick, 1000);
-      }
-
-      parent.postMessage({ type: "builtin_ready", id: "ambient" }, "*");
+      startAmbient(document.getElementById("cv"), config);
+      startClock(document.getElementById("clock"), config);
     </script>
   </body>
 </html>
