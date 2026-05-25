@@ -6,22 +6,87 @@
     "type": "object",
     "required": ["ha_base_url", "ha_token", "entities"],
     "properties": {
-      "ha_base_url": { "type": "string", "description": "e.g. http://homeassistant.local:8123" },
-      "ha_token": { "type": "string", "description": "Long-lived access token" },
+      "theme": {
+        "type": "string",
+        "enum": ["auto", "light", "dark", "midnight"],
+        "default": "auto",
+        "description": "Color scheme. Auto follows the device/OS preference."
+      },
+      "font_scale": {
+        "type": "number",
+        "minimum": 0.5,
+        "maximum": 2,
+        "format": "range",
+        "default": 1,
+        "description": "Scale all typography (0.5×–2×)."
+      },
+      "font_family": {
+        "type": "string",
+        "enum": ["geist", "system", "serif", "mono"],
+        "default": "geist",
+        "description": "Typeface for tile labels and values."
+      },
+      "accent_color": {
+        "type": "string",
+        "format": "color",
+        "description": "Global accent for tile highlights. Leave empty for theme default."
+      },
+      "ha_base_url": {
+        "type": "string",
+        "description": "e.g. http://homeassistant.local:8123"
+      },
+      "ha_token": {
+        "type": "string",
+        "description": "Long-lived access token"
+      },
       "entities": {
         "type": "array",
         "items": {
           "type": "object",
           "required": ["id"],
           "properties": {
-            "id": { "type": "string", "description": "HA entity_id, e.g. sensor.living_room_temp" },
+            "id": {
+              "type": "string",
+              "description": "HA entity_id, e.g. sensor.living_room_temp"
+            },
             "label": { "type": "string" },
             "unit": { "type": "string" },
-            "icon": { "type": "string", "description": "Emoji or short text shown as glyph" }
+            "icon": {
+              "type": "string",
+              "description": "Emoji or short text shown as glyph"
+            },
+            "accent_color": {
+              "type": "string",
+              "format": "color",
+              "description": "Per-tile accent stripe color. Overrides the global accent for this tile."
+            }
           }
         }
       },
-      "columns": { "type": "integer", "minimum": 1, "maximum": 6, "default": 3 }
+      "columns": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 6,
+        "default": 3
+      },
+      "layout_density": {
+        "type": "string",
+        "enum": ["compact", "comfortable", "spacious"],
+        "default": "comfortable",
+        "description": "Tile padding and spacing."
+      },
+      "value_color": {
+        "type": "string",
+        "enum": ["auto", "primary", "destructive"],
+        "default": "auto",
+        "description": "Color for sensor values. Auto uses the theme foreground."
+      },
+      "error_styling": {
+        "type": "string",
+        "enum": ["subtle", "border", "prominent"],
+        "default": "border",
+        "description": "How failed tiles are highlighted."
+      }
     }
   }
 }
