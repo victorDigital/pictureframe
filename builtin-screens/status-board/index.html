@@ -3,79 +3,227 @@
   <head>
     <meta charset="utf-8" />
     <title>Status board</title>
-    <style>
-      :root { color-scheme: dark; }
-      html, body { margin: 0; height: 100%; background: #0a0d12; color: #e6e8ec; font-family: ui-sans-serif, system-ui, sans-serif; }
-      body { padding: 4vh 5vw; box-sizing: border-box; display: grid; align-content: start; gap: 2vh; }
-      .grid { display: grid; gap: 1.5vw; grid-template-columns: repeat(var(--cols, 3), 1fr); }
-      .tile {
-        background: rgba(255,255,255,0.04);
-        border: 1px solid rgba(255,255,255,0.07);
-        border-radius: 0.8rem;
-        padding: 1.5vw;
-        display: grid;
-        grid-template-rows: auto 1fr auto;
-        gap: 0.5rem;
-        min-height: 16vh;
-      }
-      .tile .icon { font-size: 3vw; opacity: 0.8; }
-      .tile .value { font-size: 4vw; font-weight: 300; line-height: 1; letter-spacing: -0.02em; }
-      .tile .unit { font-size: 1.5vw; opacity: 0.5; margin-left: 0.25rem; }
-      .tile .label { font-size: 1.5vw; opacity: 0.65; }
-      .err { color: #ff9b9b; }
-    </style>
+    <link rel="stylesheet" href="/builtin/_shared/style.css" />
+    <link rel="stylesheet" href="/builtin/status-board/assets/status-board.css" />
   </head>
-  <body>
-    <div class="grid" id="grid"></div>
-    <script>
-      const params = new URLSearchParams(location.search);
-      let config = {};
-      try { config = JSON.parse(params.get("config") || "{}"); } catch (e) {}
+  <body class="bg-background text-foreground h-screen min-h-screen overflow-hidden">
+    <div
+      id="grid"
+      class="status-board-root grid h-full w-full content-start transition-opacity duration-300"
+      role="list"
+    ></div>
+    <script type="module">
+      import { init, fetchWithTimeout } from "/builtin/_shared/runtime.js";
+
+      const config = init("status-board");
       const grid = document.getElementById("grid");
-      grid.style.setProperty("--cols", config.columns || 3);
+
+      const DENSITY = {
+        compact: {
+          pad: "p-3",
+          gap: "gap-2",
+          gridGap: "gap-2",
+          icon: "text-2xl",
+          value: "text-3xl",
+          unit: "text-sm",
+          label: "text-xs",
+          minH: "min-h-[12vh]",
+        },
+        comfortable: {
+          pad: "p-5",
+          gap: "gap-3",
+          gridGap: "gap-4",
+          icon: "text-3xl",
+          value: "text-4xl",
+          unit: "text-base",
+          label: "text-sm",
+          minH: "min-h-[16vh]",
+        },
+        spacious: {
+          pad: "p-8",
+          gap: "gap-4",
+          gridGap: "gap-6",
+          icon: "text-4xl",
+          value: "text-5xl",
+          unit: "text-lg",
+          label: "text-base",
+          minH: "min-h-[20vh]",
+        },
+      };
+
+      const COLUMN_CLASS = {
+        1: "grid-cols-1",
+        2: "grid-cols-2",
+        3: "grid-cols-3",
+        4: "grid-cols-4",
+        5: "grid-cols-5",
+        6: "grid-cols-6",
+      };
+
+      const VALUE_COLOR = {
+        auto: "text-foreground",
+        primary: "text-primary",
+        destructive: "text-destructive",
+      };
+
+      const ERROR_STYLE = {
+        subtle: "text-destructive",
+        border: "border border-destructive bg-destructive/10 text-destructive",
+        prominent:
+          "border-2 border-destructive bg-destructive/20 text-destructive ring-2 ring-destructive/30",
+      };
+
+      function density() {
+        return DENSITY[config.layout_density] ?? DENSITY.comfortable;
+      }
+
+      function columns() {
+        const n = Number(config.columns);
+        if (!Number.isFinite(n)) return 3;
+        return Math.max(1, Math.min(6, Math.round(n)));
+      }
+
+      function valueColorClass() {
+        return VALUE_COLOR[config.value_color] ?? VALUE_COLOR.auto;
+      }
+
+      function errorClass() {
+        return ERROR_STYLE[config.error_styling] ?? ERROR_STYLE.border;
+      }
+
+      function applyGridLayout() {
+        const d = density();
+        const cols = columns();
+        grid.className = [
+          "status-board-root grid h-full w-full content-start transition-opacity duration-300",
+          "p-6",
+          d.gridGap,
+          COLUMN_CLASS[cols] ?? COLUMN_CLASS[3],
+        ].join(" ");
+      }
+
+      function escapeHtml(s) {
+        return String(s)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      function tileAccentStyle(entity) {
+        const color = entity.accent_color || config.accent_color;
+        if (!color) return "";
+        return `--tile-accent:${color}`;
+      }
+
+      function renderConfigError(message) {
+        applyGridLayout();
+        const d = density();
+        grid.innerHTML = "";
+        const tile = document.createElement("article");
+        tile.className = [
+          "col-span-full flex flex-col justify-center rounded-xl bg-card text-card-foreground",
+          d.pad,
+          d.gap,
+          d.minH,
+          errorClass(),
+        ].join(" ");
+        tile.setAttribute("role", "listitem");
+        tile.innerHTML =
+          `<div class="${d.icon} opacity-80" aria-hidden="true">⚠️</div>` +
+          `<div class="${d.value} font-light leading-none tracking-tight tabular-nums">${escapeHtml(message)}</div>` +
+          `<div class="${d.label} text-muted-foreground">Configuration</div>`;
+        grid.appendChild(tile);
+      }
+
+      function renderTile(result) {
+        const d = density();
+        const entity = result.entity;
+        const tile = document.createElement("article");
+        const accentStyle = tileAccentStyle(entity);
+        const hasAccent = Boolean(accentStyle);
+
+        tile.className = [
+          "flex flex-col rounded-xl bg-card text-card-foreground border border-border shadow-sm",
+          d.pad,
+          d.gap,
+          d.minH,
+          hasAccent ? "tile-accent" : "",
+        ].join(" ");
+        tile.setAttribute("role", "listitem");
+        if (hasAccent) tile.style.cssText = accentStyle;
+
+        if (result.error) {
+          tile.className += " " + errorClass();
+          tile.innerHTML =
+            `<div class="${d.icon} opacity-80" aria-hidden="true">${escapeHtml(entity.icon || "⚠️")}</div>` +
+            `<div class="${d.value} font-light leading-none tracking-tight tabular-nums break-words">${escapeHtml(result.error)}</div>` +
+            `<div class="${d.label} text-muted-foreground">${escapeHtml(entity.label || entity.id)}</div>`;
+          return tile;
+        }
+
+        const unit = entity.unit || result.state.attributes?.unit_of_measurement || "";
+        const label =
+          entity.label || result.state.attributes?.friendly_name || entity.id;
+        const valueClass = `${d.value} font-light leading-none tracking-tight tabular-nums ${valueColorClass()}`;
+
+        tile.innerHTML =
+          `<div class="${d.icon} opacity-80" aria-hidden="true">${escapeHtml(entity.icon || "•")}</div>` +
+          `<div class="${valueClass}">` +
+          `${escapeHtml(result.state.state)}` +
+          (unit
+            ? `<span class="${d.unit} ml-1 font-normal text-muted-foreground">${escapeHtml(unit)}</span>`
+            : "") +
+          `</div>` +
+          `<div class="${d.label} text-muted-foreground">${escapeHtml(label)}</div>`;
+
+        return tile;
+      }
 
       async function refresh() {
+        applyGridLayout();
+
         if (!config.ha_base_url || !config.ha_token || !Array.isArray(config.entities)) {
-          grid.innerHTML = '<div class="tile err">Configure ha_base_url, ha_token and entities.</div>';
+          renderConfigError("Configure ha_base_url, ha_token and entities.");
           return;
         }
+
+        if (config.entities.length === 0) {
+          renderConfigError("Add at least one entity to the entities list.");
+          return;
+        }
+
+        grid.style.opacity = "0.65";
         const headers = {
-          "Authorization": "Bearer " + config.ha_token,
-          "Content-Type": "application/json"
+          Authorization: "Bearer " + config.ha_token,
+          "Content-Type": "application/json",
         };
-        const results = await Promise.all(config.entities.map(async (e) => {
-          try {
-            const r = await fetch(config.ha_base_url + "/api/states/" + encodeURIComponent(e.id), { headers });
-            if (!r.ok) return { entity: e, error: "HTTP " + r.status };
-            return { entity: e, state: await r.json() };
-          } catch (err) {
-            return { entity: e, error: String(err) };
-          }
-        }));
+
+        const results = await Promise.all(
+          config.entities.map(async (entity) => {
+            try {
+              const url =
+                config.ha_base_url.replace(/\/$/, "") +
+                "/api/states/" +
+                encodeURIComponent(entity.id);
+              const r = await fetchWithTimeout(url, { headers });
+              if (!r.ok) return { entity, error: "HTTP " + r.status };
+              return { entity, state: await r.json() };
+            } catch (err) {
+              return { entity, error: String(err) };
+            }
+          }),
+        );
 
         grid.innerHTML = "";
-        for (const r of results) {
-          const tile = document.createElement("div");
-          tile.className = "tile";
-          if (r.error) {
-            tile.innerHTML =
-              '<div class="icon">' + (r.entity.icon || "⚠️") + '</div>' +
-              '<div class="value err">' + r.error + '</div>' +
-              '<div class="label">' + (r.entity.label || r.entity.id) + '</div>';
-          } else {
-            const unit = r.entity.unit || r.state.attributes.unit_of_measurement || "";
-            tile.innerHTML =
-              '<div class="icon">' + (r.entity.icon || "•") + '</div>' +
-              '<div class="value">' + r.state.state + (unit ? '<span class="unit">' + unit + '</span>' : "") + '</div>' +
-              '<div class="label">' + (r.entity.label || r.state.attributes.friendly_name || r.entity.id) + '</div>';
-          }
-          grid.appendChild(tile);
+        for (const result of results) {
+          grid.appendChild(renderTile(result));
         }
+        grid.style.opacity = "1";
       }
 
       refresh();
       setInterval(refresh, 30000);
-      parent.postMessage({ type: "builtin_ready", id: "status-board" }, "*");
     </script>
   </body>
 </html>
