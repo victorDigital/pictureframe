@@ -1,0 +1,100 @@
+:root {
+  --transit-on-time: var(--foreground);
+  --transit-late: var(--chart-2);
+  --transit-cancelled: var(--destructive);
+  --transit-imminent: var(--primary);
+}
+
+@keyframes transit-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.transit-root {
+  animation: transit-fade-in 0.6s ease-out both;
+}
+
+.line-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.25rem;
+  padding: 0.15em 0.55em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.line-badge[data-style="filled"] {
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--primary) 18%, transparent);
+  color: var(--primary);
+}
+
+.line-badge[data-style="outline"] {
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in oklab, var(--primary) 45%, transparent);
+  color: var(--primary);
+  background: transparent;
+}
+
+.line-badge[data-style="pill"] {
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--primary) 18%, transparent);
+  color: var(--primary);
+}
+
+.line-badge[data-style="square"] {
+  border-radius: 0;
+  background: color-mix(in oklab, var(--primary) 18%, transparent);
+  color: var(--primary);
+}
+
+.line-badge[data-style="minimal"] {
+  padding-inline: 0;
+  min-width: 0;
+  background: transparent;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.dep-row[data-compact="true"] {
+  padding-block: 0.35rem;
+}
+
+.dep-row[data-compact="false"] {
+  padding-block: 0.65rem;
+}
+
+.dep-when[data-status="on_time"] {
+  color: var(--transit-on-time);
+}
+
+.dep-when[data-status="late"] {
+  color: var(--transit-late);
+  font-weight: 600;
+}
+
+.dep-when[data-status="cancelled"] {
+  color: var(--transit-cancelled);
+  text-decoration: line-through;
+  opacity: 0.85;
+}
+
+.dep-when[data-imminent="true"]:not([data-status="cancelled"]) {
+  color: var(--transit-imminent);
+  font-weight: 600;
+}
+
+.dep-dest[data-status="cancelled"] {
+  color: var(--transit-cancelled);
+  text-decoration: line-through;
+  opacity: 0.7;
+}

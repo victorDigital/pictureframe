@@ -3,93 +3,193 @@
   <head>
     <meta charset="utf-8" />
     <title>Transit</title>
-    <style>
-      :root { color-scheme: dark; }
-      html, body { margin: 0; height: 100%; background: #0c1117; color: #e6e8ec; font-family: ui-sans-serif, system-ui, sans-serif; }
-      body { padding: 4vh 5vw; box-sizing: border-box; display: grid; align-content: start; gap: 3vh; }
-      .stop h2 { font-size: 2vw; font-weight: 300; margin: 0 0 0.75rem; letter-spacing: -0.01em; }
-      .dep { display: grid; grid-template-columns: 5vw 1fr auto; gap: 1.5vw; align-items: baseline; padding: 0.4rem 0; border-top: 1px solid rgba(255,255,255,0.08); }
-      .dep:first-of-type { border-top: 0; }
-      .line { display: inline-block; min-width: 4vw; padding: 0.1em 0.4em; border-radius: 0.3em; background: rgba(79, 140, 255, 0.18); color: var(--accent, #4f8cff); text-align: center; font-weight: 500; font-size: 1.5vw; }
-      .dest { font-size: 1.6vw; }
-      .when { font-size: 1.6vw; font-variant-numeric: tabular-nums; opacity: 0.85; }
-      .soon { color: #ff9b6b; font-weight: 500; }
-      .err { color: #ff9b9b; }
-      .empty { opacity: 0.5; font-style: italic; }
-    </style>
+    <link rel="stylesheet" href="/builtin/_shared/style.css" />
+    <link rel="stylesheet" href="/builtin/transit/assets/transit.css" />
   </head>
-  <body id="root"></body>
-    <script>
-      const params = new URLSearchParams(location.search);
-      let config = {};
-      try { config = JSON.parse(params.get("config") || "{}"); } catch (e) {}
+  <body class="fixed inset-0 overflow-hidden bg-background text-foreground">
+    <main
+      id="root"
+      class="transit-root flex h-full w-full flex-col gap-8 overflow-y-auto px-10 py-10"
+      aria-live="polite"
+    ></main>
+    <script type="module">
+      import { init, fetchWithTimeout } from "/builtin/_shared/runtime.js";
+
+      const config = init("transit");
       const root = document.getElementById("root");
 
-      function fmtWhen(d) {
-        const diff = Math.round((d.getTime() - Date.now()) / 60000);
-        if (diff <= 0) return "now";
-        if (diff < 60) return diff + " min";
-        return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+      const refreshSec = Math.max(15, config.refresh_sec ?? 60);
+      const maxPerStop = Math.max(1, Math.min(12, config.max_per_stop ?? 4));
+      const compact = config.compact_mode === true;
+      const badgeStyle = config.line_badge_style ?? "filled";
+      const soonThreshold = 5;
+
+      applyStatusColors();
+
+      function applyStatusColors() {
+        if (config.on_time_color) {
+          document.documentElement.style.setProperty("--transit-on-time", config.on_time_color);
+        }
+        if (config.late_color) {
+          document.documentElement.style.setProperty("--transit-late", config.late_color);
+        }
+        if (config.cancelled_color) {
+          document.documentElement.style.setProperty("--transit-cancelled", config.cancelled_color);
+        }
       }
 
-      async function load() {
-        if (!config.feed_url) {
-          root.innerHTML = '<div class="err">Configure feed_url.</div>';
-          return;
+      function fmtWhen(date) {
+        const diff = Math.round((date.getTime() - Date.now()) / 60000);
+        if (diff <= 0) return "now";
+        if (diff < 60) return diff + " min";
+        return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+      }
+
+      function resolveMinutes(dep) {
+        if (typeof dep.minutes === "number") return dep.minutes;
+        if (dep.when) {
+          const when = new Date(dep.when);
+          if (!Number.isNaN(when.getTime())) {
+            return Math.round((when.getTime() - Date.now()) / 60000);
+          }
         }
-        try {
-          const r = await fetch(config.feed_url);
-          if (!r.ok) throw new Error("HTTP " + r.status);
-          const data = await r.json();
-          render(data);
-        } catch (e) {
-          root.innerHTML = '<div class="err">Could not load: ' + e + '</div>';
-        }
+        return null;
+      }
+
+      function normalizeStatus(dep) {
+        const raw = dep.status ?? (dep.cancelled ? "cancelled" : dep.late ? "late" : null);
+        if (!raw) return "on_time";
+        const s = String(raw).toLowerCase().replace(/[\s-]+/g, "_");
+        if (s === "canceled" || s === "cancelled") return "cancelled";
+        if (s === "late" || s === "delayed" || s === "delay") return "late";
+        if (s === "on_time" || s === "scheduled" || s === "expected") return "on_time";
+        return "on_time";
+      }
+
+      function el(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text != null) node.textContent = text;
+        return node;
       }
 
       function render(data) {
         root.innerHTML = "";
-        const stops = data.stops || [];
+        const stops = data.stops ?? [];
+
         if (stops.length === 0) {
-          const e = document.createElement("div");
-          e.className = "empty";
-          e.textContent = "No stops configured.";
-          root.appendChild(e);
+          root.appendChild(el("p", "text-base italic text-muted-foreground", "No stops configured."));
           return;
         }
+
+        const stopGap = compact ? "gap-4" : "gap-8";
+        root.className =
+          "transit-root flex h-full w-full flex-col overflow-y-auto px-10 py-10 " + stopGap;
+
         for (const stop of stops) {
-          const el = document.createElement("section");
-          el.className = "stop";
-          const h = document.createElement("h2");
-          h.textContent = stop.name;
-          el.appendChild(h);
-          const departures = (stop.departures || []).slice(0, config.max_per_stop || 4);
+          const section = el("section", "flex flex-col " + (compact ? "gap-2" : "gap-3"));
+          const heading = el(
+            "h2",
+            compact
+              ? "text-xl font-light tracking-tight text-foreground"
+              : "text-3xl font-light tracking-tight text-foreground",
+            stop.name ?? "Stop",
+          );
+          section.appendChild(heading);
+
+          const departures = (stop.departures ?? []).slice(0, maxPerStop);
           if (departures.length === 0) {
-            const ne = document.createElement("div");
-            ne.className = "empty";
-            ne.textContent = "No upcoming departures.";
-            el.appendChild(ne);
+            section.appendChild(
+              el("p", "text-base italic text-muted-foreground", "No upcoming departures."),
+            );
+            root.appendChild(section);
+            continue;
           }
+
+          const list = el(
+            "div",
+            "divide-y divide-border/60 rounded-xl border border-border/60 bg-card/40 " +
+              (compact ? "px-4 py-1" : "px-5 py-2"),
+          );
+
           for (const dep of departures) {
             const when = dep.when ? new Date(dep.when) : null;
-            const mins = typeof dep.minutes === "number" ? dep.minutes : (when ? Math.round((when - Date.now()) / 60000) : null);
-            const soon = mins != null && mins <= 5;
-            const row = document.createElement("div");
-            row.className = "dep";
-            row.innerHTML =
-              '<span class="line">' + (dep.line || "—") + '</span>' +
-              '<span class="dest">' + (dep.destination || "") + '</span>' +
-              '<span class="when' + (soon ? " soon" : "") + '">' +
-                (when ? fmtWhen(when) : (mins != null ? mins + " min" : "—")) +
-              '</span>';
-            el.appendChild(row);
+            const mins = resolveMinutes(dep);
+            const status = normalizeStatus(dep);
+            const imminent = mins != null && mins <= soonThreshold && status !== "cancelled";
+
+            const row = el(
+              "div",
+              "dep-row flex items-baseline " + (compact ? "gap-4" : "gap-6"),
+            );
+            row.dataset.compact = compact ? "true" : "false";
+
+            const badge = el("span", "line-badge shrink-0 text-lg", dep.line ?? "—");
+            badge.dataset.style = badgeStyle;
+            row.appendChild(badge);
+
+            const dest = el(
+              "span",
+              "dep-dest min-w-0 flex-1 truncate " + (compact ? "text-base" : "text-lg"),
+              dep.destination ?? "",
+            );
+            dest.dataset.status = status;
+            row.appendChild(dest);
+
+            let whenLabel;
+            if (status === "cancelled") {
+              whenLabel = "Cancelled";
+            } else if (when && !Number.isNaN(when.getTime())) {
+              whenLabel = fmtWhen(when);
+            } else if (mins != null) {
+              whenLabel = mins + " min";
+            } else {
+              whenLabel = "—";
+            }
+
+            const whenEl = el(
+              "span",
+              "dep-when shrink-0 tabular-nums whitespace-nowrap " + (compact ? "text-base" : "text-lg"),
+              whenLabel,
+            );
+            whenEl.dataset.status = status;
+            if (imminent) whenEl.dataset.imminent = "true";
+            row.appendChild(whenEl);
+
+            list.appendChild(row);
           }
-          root.appendChild(el);
+
+          section.appendChild(list);
+          root.appendChild(section);
+        }
+      }
+
+      function showError(message) {
+        root.innerHTML = "";
+        const panel = el(
+          "div",
+          "flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center",
+        );
+        panel.appendChild(el("p", "text-lg text-destructive", message));
+        root.appendChild(panel);
+      }
+
+      async function load() {
+        if (!config.feed_url) {
+          showError("Configure feed_url.");
+          return;
+        }
+        try {
+          const res = await fetchWithTimeout(config.feed_url, {}, 15000);
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          render(await res.json());
+        } catch (err) {
+          showError("Could not load: " + err);
         }
       }
 
       load();
-      setInterval(load, (config.refresh_sec || 60) * 1000);
-      parent.postMessage({ type: "builtin_ready", id: "transit" }, "*");
+      setInterval(load, refreshSec * 1000);
     </script>
+  </body>
 </html>
