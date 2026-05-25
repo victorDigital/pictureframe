@@ -3,41 +3,85 @@
   <head>
     <meta charset="utf-8" />
     <title>Photos</title>
-    <style>
-      :root { color-scheme: dark; }
-      html, body { margin: 0; height: 100%; background: #000; color: #ccc; font-family: ui-sans-serif, system-ui, sans-serif; overflow: hidden; }
-      .frame { position: fixed; inset: 0; }
-      img.slide {
-        position: absolute; inset: 0;
-        width: 100%; height: 100%; object-fit: cover;
-        opacity: 0;
-        transition: opacity var(--fade, 1500ms) ease;
-        will-change: opacity, transform;
-      }
-      img.slide.kenburns { animation: kenburns var(--kb-duration, 30s) linear forwards; }
-      @keyframes kenburns {
-        from { transform: scale(1.05) translate(-1%, -1%); }
-        to   { transform: scale(1.15) translate(1%, 1%); }
-      }
-      .err {
-        position: fixed; inset: 0;
-        display: grid; place-items: center;
-        color: #ff9b9b;
-        font-size: 1.5rem;
-      }
-    </style>
+    <link rel="stylesheet" href="/builtin/_shared/style.css" />
+    <link rel="stylesheet" href="/builtin/photos/assets/photos.css" />
   </head>
-  <body>
-    <div class="frame" id="frame"></div>
-    <div class="err" id="err" style="display:none"></div>
-    <script>
-      const params = new URLSearchParams(location.search);
-      let config = {};
-      try { config = JSON.parse(params.get("config") || "{}"); } catch (e) {}
+  <body class="fixed inset-0 overflow-hidden bg-background text-foreground">
+    <div id="frame" class="fixed inset-0 isolate bg-background">
+      <div id="layer-a" class="slide-layer"></div>
+      <div id="layer-b" class="slide-layer"></div>
+    </div>
+    <div
+      id="caption"
+      class="pointer-events-none fixed inset-x-0 z-20 hidden px-8 py-6 text-center text-title-sm text-foreground"
+      aria-live="polite"
+    ></div>
+    <div
+      id="err"
+      class="fixed inset-0 z-50 hidden place-items-center p-8 text-center text-title-sm text-destructive"
+      role="alert"
+    ></div>
+    <script type="module">
+      import { init } from "/builtin/_shared/runtime.js";
+
+      const config = init("photos");
+      const layerA = document.getElementById("layer-a");
+      const layerB = document.getElementById("layer-b");
+      const captionEl = document.getElementById("caption");
+      const errEl = document.getElementById("err");
       const frame = document.getElementById("frame");
-      const err = document.getElementById("err");
-      const interval = (config.interval_sec || 30) * 1000;
-      document.documentElement.style.setProperty("--kb-duration", interval + "ms");
+
+      const intervalMs = Math.max(5, config.interval_sec ?? 30) * 1000;
+      const fadeMs = Math.max(200, Math.min(5000, config.fade_duration_ms ?? 1500));
+      const kbSec = Math.max(5, Math.min(120, config.kenburns_duration ?? 30));
+
+      document.documentElement.style.setProperty("--fade-duration", fadeMs + "ms");
+      document.documentElement.style.setProperty("--kb-duration", kbSec + "s");
+
+      const transitionStyle = resolveTransitionStyle(config);
+      const captionPosition = config.caption_position ?? "none";
+      const instant = config.transition === "none" && !config.transition_style;
+
+      frame.classList.add("slide-" + transitionStyle);
+      applyCaptionLayout(captionPosition);
+
+      function resolveTransitionStyle(cfg) {
+        if (cfg.transition_style) return cfg.transition_style;
+        const legacy = cfg.transition ?? "kenburns";
+        if (legacy === "none") return "fade";
+        return legacy;
+      }
+
+      function applyCaptionLayout(pos) {
+        captionEl.classList.remove(
+          "bottom-0", "bg-gradient-to-t", "from-background/90", "to-transparent",
+          "backdrop-blur-sm", "bg-background/40", "bottom-8", "rounded-xl",
+          "mx-auto", "max-w-4xl", "left-8", "right-8", "text-muted-foreground"
+        );
+        if (pos === "none") { captionEl.classList.add("hidden"); return; }
+        captionEl.classList.remove("hidden");
+        if (pos === "bottom") {
+          captionEl.classList.add("bottom-0", "bg-gradient-to-t", "from-background/90", "to-transparent", "text-muted-foreground");
+        } else if (pos === "overlay") {
+          captionEl.classList.add("bottom-8", "left-8", "right-8", "mx-auto", "max-w-4xl", "rounded-xl", "backdrop-blur-sm", "bg-background/40", "text-foreground");
+        }
+      }
+
+      function showError(msg) {
+        errEl.textContent = String(msg);
+        errEl.classList.remove("hidden");
+        errEl.classList.add("grid");
+      }
+
+      function setCaption(text) {
+        if (captionPosition === "none" || !text) {
+          captionEl.textContent = "";
+          captionEl.classList.add("hidden");
+          return;
+        }
+        captionEl.textContent = text;
+        captionEl.classList.remove("hidden");
+      }
 
       async function loadList() {
         if (config.library === "immich") {
@@ -49,17 +93,17 @@
             const r = await fetch(config.immich_base_url + "/api/album/" + config.immich_album_id, { headers });
             if (!r.ok) throw new Error("Immich album HTTP " + r.status);
             const album = await r.json();
-            return album.assets.map(a => ({
+            return album.assets.map((a) => ({
               src: config.immich_base_url + "/api/asset/file/" + a.id + "?isThumb=false",
-              api: true
+              caption: photoCaption(a), api: true,
             }));
           }
           const r = await fetch(config.immich_base_url + "/api/asset?type=IMAGE", { headers });
           if (!r.ok) throw new Error("Immich asset HTTP " + r.status);
           const list = await r.json();
-          return list.slice(0, 200).map(a => ({
+          return list.slice(0, 200).map((a) => ({
             src: config.immich_base_url + "/api/asset/file/" + a.id + "?isThumb=false",
-            api: true
+            caption: photoCaption(a), api: true,
           }));
         }
         if (config.library === "local") {
@@ -67,12 +111,27 @@
           const r = await fetch(config.local_index_url);
           if (!r.ok) throw new Error("Local HTTP " + r.status);
           const list = await r.json();
-          return list.map(src => ({ src, api: false }));
+          return list.map((src) => ({ src, caption: localCaption(src), api: false }));
         }
         if (config.library === "google") {
           throw new Error("Google Photos backend is best-effort; switch to Immich (see SPEC §11).");
         }
         throw new Error("Unknown library: " + config.library);
+      }
+
+      function photoCaption(asset) {
+        const exif = asset.exifInfo;
+        if (exif?.description) return exif.description;
+        if (exif?.city && exif?.country) return exif.city + ", " + exif.country;
+        if (asset.originalFileName) return asset.originalFileName;
+        return "";
+      }
+
+      function localCaption(url) {
+        try {
+          const name = decodeURIComponent(url.split("/").pop() || "");
+          return name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ");
+        } catch { return ""; }
       }
 
       async function fetchImage(item) {
@@ -84,73 +143,85 @@
         return URL.createObjectURL(blob);
       }
 
-      function shuffle(a) {
-        for (let i = a.length - 1; i > 0; i--) {
+      function shuffle(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
-          [a[i], a[j]] = [a[j], a[i]];
+          [arr[i], arr[j]] = [arr[j], arr[i]];
         }
-        return a;
+        return arr;
+      }
+
+      function revokeBlob(url) {
+        if (url && url.startsWith("blob:")) URL.revokeObjectURL(url);
       }
 
       async function run() {
         let list;
-        try {
-          list = await loadList();
-        } catch (e) {
-          err.textContent = String(e);
-          err.style.display = "grid";
-          return;
-        }
-        if (!list.length) {
-          err.textContent = "No photos in library.";
-          err.style.display = "grid";
-          return;
-        }
+        try { list = await loadList(); } catch (e) { showError(e); return; }
+        if (!list.length) { showError("No photos in library."); return; }
         shuffle(list);
 
-        const transition = config.transition || "kenburns";
-        let active = null;
-        let i = 0;
+        let index = 0;
+        let activeLayer = layerA;
+        let idleLayer = layerB;
+        let activeImg = null;
 
-        async function next() {
-          const item = list[i % list.length];
-          i++;
+        async function showNext() {
+          const item = list[index % list.length];
+          index++;
           let src;
-          try {
-            src = await fetchImage(item);
-          } catch (e) {
+          try { src = await fetchImage(item); } catch (e) {
             console.error("photo fetch failed", e);
-            setTimeout(next, 2000);
+            setTimeout(showNext, 2000);
             return;
           }
           const img = document.createElement("img");
-          img.className = "slide" + (transition === "kenburns" ? " kenburns" : "");
-          img.src = src;
-          img.onload = () => {
-            frame.appendChild(img);
-            requestAnimationFrame(() => {
-              img.style.opacity = 1;
-              if (active) active.style.opacity = 0;
-              setTimeout(() => {
-                if (active) {
-                  if (active.src.startsWith("blob:")) URL.revokeObjectURL(active.src);
-                  active.remove();
-                }
-                active = img;
-              }, 1500);
+          img.alt = item.caption || "Photo";
+          img.decoding = "async";
+          const targetLayer = transitionStyle === "crossfade" || transitionStyle === "push" ? idleLayer : activeLayer;
+          try {
+            await new Promise((resolve, reject) => {
+              img.onload = () => resolve();
+              img.onerror = () => reject(new Error("load failed"));
+              img.src = src;
             });
-            setTimeout(next, interval);
-          };
-          img.onerror = () => {
+          } catch {
             console.error("photo load failed", item.src);
-            setTimeout(next, 1000);
-          };
+            revokeBlob(src);
+            setTimeout(showNext, 1000);
+            return;
+          }
+          if (transitionStyle === "crossfade" || transitionStyle === "push") {
+            targetLayer.innerHTML = "";
+            targetLayer.appendChild(img);
+            if (activeImg) { activeImg.classList.remove("is-visible"); activeImg.classList.add("is-exiting"); }
+            requestAnimationFrame(() => { img.classList.add("is-visible"); setCaption(item.caption); });
+            const prevImg = activeImg;
+            const prevSrc = prevImg?.src;
+            setTimeout(() => {
+              if (prevImg) { prevImg.remove(); revokeBlob(prevSrc); }
+              [activeLayer, idleLayer] = [idleLayer, activeLayer];
+            }, instant ? 0 : fadeMs);
+            activeImg = img;
+          } else {
+            const prev = activeImg;
+            const prevSrc = prev?.src;
+            activeLayer.appendChild(img);
+            requestAnimationFrame(() => {
+              img.classList.add("is-visible");
+              if (prev) prev.classList.remove("is-visible");
+              setCaption(item.caption);
+            });
+            if (prev) {
+              setTimeout(() => { prev.remove(); revokeBlob(prevSrc); }, instant ? 0 : fadeMs);
+            }
+            activeImg = img;
+          }
+          setTimeout(showNext, intervalMs);
         }
-        next();
+        showNext();
       }
-
       run();
-      parent.postMessage({ type: "builtin_ready", id: "photos" }, "*");
     </script>
   </body>
 </html>

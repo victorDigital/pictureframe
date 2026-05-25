@@ -1,20 +1,106 @@
 {
   "id": "photos",
   "name": "Photos",
-  "description": "Photo slideshow. Backends: Immich (recommended), local directory, Google Photos (best-effort — see SPEC §11).",
+  "description": "Photo slideshow. Backends: Immich (recommended), local directory, Google Photos (best-effort \u2014 see SPEC \u00a711).",
   "config_schema": {
     "type": "object",
-    "required": ["library"],
+    "required": [
+      "library"
+    ],
     "properties": {
-      "library": { "type": "string", "enum": ["immich", "local", "google"], "default": "immich" },
-      "interval_sec": { "type": "integer", "minimum": 5, "default": 30 },
-      "transition": { "type": "string", "enum": ["fade", "kenburns", "none"], "default": "kenburns" },
-      "immich_base_url": { "type": "string", "description": "e.g. https://immich.local" },
-      "immich_api_key": { "type": "string", "description": "Immich API key with album/asset read scope" },
-      "immich_album_id": { "type": "string", "description": "Optional — restrict to one album" },
+      "library": {
+        "type": "string",
+        "enum": [
+          "immich",
+          "local",
+          "google"
+        ],
+        "default": "immich"
+      },
+      "interval_sec": {
+        "type": "integer",
+        "minimum": 5,
+        "default": 30
+      },
+      "transition": {
+        "type": "string",
+        "enum": [
+          "fade",
+          "kenburns",
+          "none"
+        ],
+        "default": "kenburns",
+        "description": "Deprecated \u2014 use transition_style. Still honored when transition_style is unset."
+      },
+      "transition_style": {
+        "type": "string",
+        "enum": [
+          "fade",
+          "kenburns",
+          "crossfade",
+          "push"
+        ],
+        "default": "kenburns",
+        "description": "How slides advance between photos"
+      },
+      "kenburns_duration": {
+        "type": "integer",
+        "minimum": 5,
+        "maximum": 120,
+        "default": 30,
+        "format": "range",
+        "description": "Ken Burns zoom duration in seconds (independent of interval_sec)"
+      },
+      "fade_duration_ms": {
+        "type": "integer",
+        "minimum": 200,
+        "maximum": 5000,
+        "default": 1500,
+        "format": "range",
+        "description": "Cross-fade / push transition length in milliseconds"
+      },
+      "caption_position": {
+        "type": "string",
+        "enum": [
+          "none",
+          "bottom",
+          "overlay"
+        ],
+        "default": "none",
+        "description": "Where to show filename or EXIF description when available"
+      },
+      "immich_base_url": {
+        "type": "string",
+        "description": "e.g. https://immich.local"
+      },
+      "immich_api_key": {
+        "type": "string",
+        "description": "Immich API key with album/asset read scope"
+      },
+      "immich_album_id": {
+        "type": "string",
+        "description": "Optional \u2014 restrict to one album"
+      },
       "local_index_url": {
         "type": "string",
         "description": "URL returning a JSON array of image URLs (served by your reverse proxy or rclone http)"
+      },
+      "theme": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "light",
+          "dark",
+          "midnight"
+        ],
+        "default": "auto"
+      },
+      "font_scale": {
+        "type": "number",
+        "minimum": 0.5,
+        "maximum": 2,
+        "default": 1,
+        "format": "range"
       }
     }
   }
