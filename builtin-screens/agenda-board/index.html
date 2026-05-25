@@ -3,182 +3,351 @@
   <head>
     <meta charset="utf-8" />
     <title>Agenda</title>
-    <style>
-      :root { color-scheme: dark; }
-      html, body { margin: 0; height: 100%; background: #0c1117; color: #e6e8ec; font-family: ui-sans-serif, system-ui, sans-serif; }
-      body { display: grid; grid-template-rows: auto 1fr; padding: 4vh 5vw; box-sizing: border-box; gap: 4vh; }
-      header { display: grid; grid-template-columns: auto 1fr auto; align-items: end; gap: 3vw; }
-      .clock .time { font-size: 8vw; font-weight: 200; line-height: 1; letter-spacing: -0.04em; }
-      .clock .date { opacity: 0.7; margin-top: 0.5rem; font-size: 1.5vw; }
-      .weather { text-align: right; }
-      .weather .ic { font-size: 5vw; line-height: 1; }
-      .weather .temp { font-size: 4vw; font-weight: 200; line-height: 1; }
-      .weather .sum { opacity: 0.65; font-size: 1.2vw; }
-      .agenda { display: grid; grid-auto-rows: max-content; gap: 1vh; }
-      .agenda h2 { font-size: 1.3vw; opacity: 0.55; text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 0.5rem; }
-      .ev { display: grid; grid-template-columns: 8vw 1fr; gap: 1vw; padding: 0.6rem 0; border-top: 1px solid rgba(255,255,255,0.08); }
-      .ev:first-of-type { border-top: 0; }
-      .ev .when { font-variant-numeric: tabular-nums; font-size: 1.5vw; opacity: 0.9; }
-      .ev .what { font-size: 1.7vw; line-height: 1.2; }
-      .ev .loc  { opacity: 0.55; font-size: 1.1vw; margin-top: 0.15rem; }
-      .empty { opacity: 0.5; font-style: italic; }
-      .err { color: #ff9b9b; }
-    </style>
+    <link rel="stylesheet" href="/builtin/_shared/style.css" />
   </head>
-  <body>
-    <header>
-      <div class="clock">
-        <div class="time" id="time">--:--</div>
-        <div class="date" id="date"></div>
-      </div>
-      <div></div>
-      <div class="weather">
-        <div class="ic" id="wic">…</div>
-        <div class="temp"><span id="wtemp">--</span><span id="wunit">°</span></div>
-        <div class="sum" id="wsum"></div>
-      </div>
-    </header>
-    <section class="agenda">
-      <h2>Today &amp; tomorrow</h2>
-      <div id="agenda" class="empty">Loading agenda…</div>
-    </section>
-    <script>
-      const params = new URLSearchParams(location.search);
-      let config = {};
-      try { config = JSON.parse(params.get("config") || "{}"); } catch (e) {}
+  <body class="h-screen w-screen overflow-hidden bg-background text-foreground">
+    <div id="root" class="flex h-full w-full flex-col gap-6 p-8"></div>
+    <script type="module">
+      import {
+        init,
+        formatTime,
+        formatDate,
+        fetchWithTimeout,
+      } from "/builtin/_shared/runtime.js";
 
-      // --- clock ---
-      function tickClock() {
-        const n = new Date();
-        document.getElementById("time").textContent =
-          String(n.getHours()).padStart(2, "0") + ":" + String(n.getMinutes()).padStart(2, "0");
-        document.getElementById("date").textContent =
-          n.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+      const config = init("agenda-board");
+
+      const ICONS = {
+        0: "☀️", 1: "🌤️", 2: "⛅", 3: "☁️",
+        45: "🌫️", 48: "🌫️",
+        51: "🌦️", 53: "🌦️", 55: "🌦️",
+        61: "🌧️", 63: "🌧️", 65: "🌧️",
+        71: "🌨️", 73: "🌨️", 75: "❄️",
+        80: "🌧️", 81: "🌧️", 82: "🌧️",
+        95: "⛈️", 96: "⛈️", 99: "⛈️",
+      };
+      const SUMMARY = {
+        0: "Clear", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
+        45: "Fog", 48: "Fog",
+        51: "Drizzle", 53: "Drizzle", 55: "Drizzle",
+        61: "Rain", 63: "Rain", 65: "Heavy rain",
+        71: "Snow", 73: "Snow", 75: "Heavy snow",
+        80: "Showers", 81: "Showers", 82: "Showers",
+        95: "Thunder", 96: "Thunder", 99: "Thunder",
+      };
+
+      const layout = ["split-2", "split-3", "stacked"].includes(config.layout)
+        ? config.layout
+        : "split-2";
+      const eventsLimit = clampInt(config.events_to_show, 1, 12, 6);
+      const units = config.units === "imperial" ? "imperial" : "metric";
+
+      const root = document.getElementById("root");
+      root.className = layoutClasses(layout);
+
+      const clockEl = buildClockPanel();
+      const weatherEl = buildWeatherPanel();
+      const agendaEl = buildAgendaPanel();
+
+      if (layout === "split-3") {
+        clockEl.className = (clockEl.className + " self-stretch").trim();
+        weatherEl.className = (weatherEl.className + " self-stretch").trim();
+        root.append(clockEl, weatherEl, agendaEl);
+      } else if (layout === "stacked") {
+        root.append(clockEl, weatherEl, agendaEl);
+      } else {
+        const header = document.createElement("header");
+        header.className = "grid grid-cols-2 items-end gap-6";
+        header.append(clockEl, weatherEl);
+        root.append(header, agendaEl);
       }
-      tickClock();
-      setInterval(tickClock, 30000);
 
-      // --- weather ---
-      const ICONS = { 0:"☀️",1:"🌤️",2:"⛅",3:"☁️",45:"🌫️",48:"🌫️",51:"🌦️",53:"🌦️",55:"🌦️",
-        61:"🌧️",63:"🌧️",65:"🌧️",71:"🌨️",73:"🌨️",75:"❄️",80:"🌧️",81:"🌧️",82:"🌧️",
-        95:"⛈️",96:"⛈️",99:"⛈️" };
-      const SUMMARY = { 0:"Clear",1:"Mainly clear",2:"Partly cloudy",3:"Overcast",45:"Fog",
-        51:"Drizzle",53:"Drizzle",55:"Drizzle",61:"Rain",63:"Rain",65:"Heavy rain",
-        71:"Snow",73:"Snow",75:"Heavy snow",80:"Showers",81:"Showers",82:"Showers",
-        95:"Thunder",96:"Thunder",99:"Thunder" };
-      async function loadWeather() {
-        if (config.latitude == null || config.longitude == null) return;
+      tickClock(clockEl);
+      setInterval(() => tickClock(clockEl), 30000);
+      loadWeather(weatherEl);
+      setInterval(() => loadWeather(weatherEl), 15 * 60 * 1000);
+      loadAgenda(agendaEl);
+      setInterval(() => loadAgenda(agendaEl), 10 * 60 * 1000);
+
+      function layoutClasses(mode) {
+        const base = "h-full w-full overflow-hidden p-8 gap-6";
+        if (mode === "split-3") {
+          return `${base} grid grid-cols-3`;
+        }
+        if (mode === "stacked") {
+          return `${base} flex flex-col items-center justify-center text-center`;
+        }
+        return `${base} grid grid-rows-[auto_1fr]`;
+      }
+
+      function buildClockPanel() {
+        const panel = document.createElement("section");
+        panel.className = panelClass("clock");
+        panel.innerHTML =
+          '<div class="text-display-lg tabular tracking-tight" id="ab-time">--:--</div>' +
+          '<div class="text-title-sm text-muted-foreground mt-2" id="ab-date"></div>';
+        return panel;
+      }
+
+      function buildWeatherPanel() {
+        const panel = document.createElement("section");
+        panel.className = panelClass("weather") + (layout === "split-2" ? " text-right" : "");
+        panel.innerHTML =
+          '<div class="text-title-xl leading-none" id="ab-wic">…</div>' +
+          '<div class="text-display-lg tabular tracking-tight mt-2">' +
+            '<span id="ab-wtemp">--</span><span id="ab-wunit">°</span>' +
+          '</div>' +
+          '<div class="text-caption mt-2" id="ab-wlabel"></div>' +
+          '<div class="text-body text-muted-foreground mt-1" id="ab-wsum"></div>';
+        return panel;
+      }
+
+      function buildAgendaPanel() {
+        const panel = document.createElement("section");
+        panel.className =
+          panelClass("agenda") +
+          " flex min-h-0 flex-col" +
+          (layout === "split-3" ? " border-l border-border px-6 self-stretch" : "");
+        panel.innerHTML =
+          '<h2 class="text-eyebrow mb-4">Today &amp; tomorrow</h2>' +
+          '<div id="ab-agenda" class="text-body text-muted-foreground italic min-h-0 flex-1 overflow-hidden">Loading agenda…</div>';
+        return panel;
+      }
+
+      function panelClass(kind) {
+        if (layout === "stacked") {
+          return "w-full max-w-4xl";
+        }
+        if (layout === "split-3" && kind === "agenda") {
+          return "min-w-0";
+        }
+        return "";
+      }
+
+      function tickClock(panel) {
+        const now = new Date();
+        panel.querySelector("#ab-time").textContent = formatTime(now);
+        panel.querySelector("#ab-date").textContent = formatDate(now, "long");
+      }
+
+      async function loadWeather(panel) {
+        const label = panel.querySelector("#ab-wlabel");
+        const sum = panel.querySelector("#ab-wsum");
+        const ic = panel.querySelector("#ab-wic");
+        const temp = panel.querySelector("#ab-wtemp");
+        const unit = panel.querySelector("#ab-wunit");
+
+        if (config.latitude == null || config.longitude == null) {
+          sum.textContent = "Configure latitude and longitude.";
+          sum.className = "text-body text-destructive mt-1";
+          return;
+        }
+
+        label.textContent =
+          config.location_label ||
+          `${Number(config.latitude).toFixed(2)}, ${Number(config.longitude).toFixed(2)}`;
+
         try {
           const url = new URL("https://api.open-meteo.com/v1/forecast");
-          url.searchParams.set("latitude", config.latitude);
-          url.searchParams.set("longitude", config.longitude);
+          url.searchParams.set("latitude", String(config.latitude));
+          url.searchParams.set("longitude", String(config.longitude));
           url.searchParams.set("current", "temperature_2m,weather_code");
-          url.searchParams.set("temperature_unit", config.units === "imperial" ? "fahrenheit" : "celsius");
+          url.searchParams.set("temperature_unit", units === "imperial" ? "fahrenheit" : "celsius");
           url.searchParams.set("timezone", "auto");
-          const r = await fetch(url);
-          if (!r.ok) return;
-          const data = await r.json();
-          document.getElementById("wic").textContent = ICONS[data.current.weather_code] || "—";
-          document.getElementById("wtemp").textContent = Math.round(data.current.temperature_2m);
-          document.getElementById("wunit").textContent = data.current_units.temperature_2m;
-          document.getElementById("wsum").textContent = SUMMARY[data.current.weather_code] || "";
-        } catch (e) {
-          // ignore
+
+          const res = await fetchWithTimeout(url.toString());
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          const data = await res.json();
+          const code = data.current.weather_code;
+
+          ic.textContent = ICONS[code] || "—";
+          temp.textContent = String(Math.round(data.current.temperature_2m));
+          unit.textContent = data.current_units.temperature_2m;
+          sum.textContent = SUMMARY[code] || "";
+          sum.className = "text-body text-muted-foreground mt-1";
+        } catch {
+          sum.textContent = "Could not load weather.";
+          sum.className = "text-body text-destructive mt-1";
         }
       }
-      loadWeather();
-      setInterval(loadWeather, 15 * 60 * 1000);
 
-      // --- agenda from iCal ---
-      function unfoldIcs(text) {
-        return text.replace(/\r\n[ \t]/g, "").replace(/\n[ \t]/g, "");
+      async function loadAgenda(panel) {
+        const el = panel.querySelector("#ab-agenda");
+        if (!config.ical_url) {
+          setAgendaMessage(el, "Configure ical_url to show events.", "muted");
+          return;
+        }
+
+        try {
+          const res = await fetchWithTimeout(config.ical_url);
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          const text = await res.text();
+          const now = new Date();
+          const horizon = new Date(now.getTime() + 36 * 3600 * 1000);
+          const events = parseIcs(text)
+            .filter((e) => e.start >= now && e.start <= horizon)
+            .sort((a, b) => a.start - b.start)
+            .slice(0, eventsLimit);
+
+          el.replaceChildren();
+          el.className = "min-h-0 flex-1 overflow-hidden divide-y divide-border";
+
+          if (events.length === 0) {
+            setAgendaMessage(el, "Nothing on the schedule.", "muted");
+            return;
+          }
+
+          for (const ev of events) {
+            el.appendChild(renderEvent(ev, now));
+          }
+        } catch (err) {
+          setAgendaMessage(el, "Could not load calendar: " + err, "error");
+        }
       }
-      function parseIcsDate(value) {
-        // 20260520T080000Z, 20260520T080000, or 20260520
-        const m = value.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z?))?$/);
+
+      function setAgendaMessage(el, text, tone) {
+        el.replaceChildren();
+        el.textContent = text;
+        el.className =
+          "text-body min-h-0 flex-1 overflow-hidden" +
+          (tone === "error" ? " text-destructive" : " text-muted-foreground italic");
+      }
+
+      function renderEvent(ev, now) {
+        const row = document.createElement("div");
+        row.className = "grid grid-cols-[8rem_1fr] gap-4 py-3";
+
+        const when = document.createElement("div");
+        when.className = "text-title-sm tabular text-muted-foreground";
+        when.textContent = formatEventWhen(ev, now);
+
+        const body = document.createElement("div");
+        body.className = "min-w-0";
+
+        const title = document.createElement("div");
+        title.className = "text-title-sm truncate";
+        title.textContent = ev.summary || "—";
+
+        body.appendChild(title);
+        if (ev.location) {
+          const loc = document.createElement("div");
+          loc.className = "text-caption truncate mt-1";
+          loc.textContent = ev.location;
+          body.appendChild(loc);
+        }
+
+        row.append(when, body);
+        return row;
+      }
+
+      function formatEventWhen(ev, now) {
+        const sameDay = ev.start.toDateString() === now.toDateString();
+        if (ev.allDay) {
+          return sameDay ? "All day" : formatDate(ev.start, "weekday");
+        }
+        if (sameDay) return formatTime(ev.start);
+        return formatDate(ev.start, "weekday") + " " + formatTime(ev.start);
+      }
+
+      function unfoldIcs(text) {
+        return text.replace(/\r?\n[ \t]/g, "");
+      }
+
+      function unescapeIcs(value) {
+        return value
+          .replace(/\\n/gi, "\n")
+          .replace(/\\,/g, ",")
+          .replace(/\\;/g, ";")
+          .replace(/\\\\/g, "\\");
+      }
+
+      function parseIcsProperty(line) {
+        const sep = line.indexOf(":");
+        if (sep < 0) return null;
+        const head = line.slice(0, sep);
+        const raw = line.slice(sep + 1);
+        const parts = head.split(";");
+        return {
+          name: parts[0],
+          params: parts.slice(1),
+          value: unescapeIcs(raw),
+        };
+      }
+
+      function parseIcsDate(value, params) {
+        const dateOnly =
+          params.some((p) => p.toUpperCase() === "VALUE=DATE") || !value.includes("T");
+        const m = value.match(
+          /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?$/,
+        );
         if (!m) return null;
         const [, y, mo, d, h, mi, s, z] = m;
-        if (!h) return new Date(Number(y), Number(mo) - 1, Number(d));
+        if (dateOnly || !h) {
+          return new Date(Number(y), Number(mo) - 1, Number(d));
+        }
         return z === "Z"
           ? new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s)))
           : new Date(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s));
       }
+
+      function isAllDay(start, end, params) {
+        if (params.some((p) => p.toUpperCase() === "VALUE=DATE")) return true;
+        if (!end) return start.getHours() === 0 && start.getMinutes() === 0;
+        return end.getTime() - start.getTime() >= 86400000;
+      }
+
       function parseIcs(text) {
         const events = [];
-        const lines = unfoldIcs(text).split(/\r?\n/);
         let cur = null;
-        for (const line of lines) {
-          if (line.startsWith("BEGIN:VEVENT")) cur = {};
-          else if (line.startsWith("END:VEVENT") && cur) {
-            if (cur.SUMMARY && cur.DTSTART) events.push(cur);
+
+        for (const line of unfoldIcs(text).split(/\r?\n/)) {
+          if (line === "BEGIN:VEVENT") {
+            cur = { startParams: [] };
+            continue;
+          }
+          if (line === "END:VEVENT" && cur) {
+            if (cur.summary && cur.start instanceof Date && !Number.isNaN(cur.start.getTime())) {
+              events.push({
+                summary: cur.summary,
+                location: cur.location,
+                start: cur.start,
+                end: cur.end,
+                allDay: isAllDay(cur.start, cur.end, cur.startParams),
+              });
+            }
             cur = null;
-          } else if (cur) {
-            const idx = line.indexOf(":");
-            if (idx < 0) continue;
-            const key = line.slice(0, idx).split(";")[0];
-            const val = line.slice(idx + 1);
-            if (key === "DTSTART") cur.DTSTART = parseIcsDate(val);
-            else if (key === "DTEND") cur.DTEND = parseIcsDate(val);
-            else if (key === "SUMMARY") cur.SUMMARY = val;
-            else if (key === "LOCATION") cur.LOCATION = val;
+            continue;
+          }
+          if (!cur) continue;
+
+          const prop = parseIcsProperty(line);
+          if (!prop) continue;
+
+          switch (prop.name) {
+            case "DTSTART":
+              cur.startParams = prop.params;
+              cur.start = parseIcsDate(prop.value, prop.params);
+              break;
+            case "DTEND":
+              cur.end = parseIcsDate(prop.value, prop.params);
+              break;
+            case "SUMMARY":
+              cur.summary = prop.value;
+              break;
+            case "LOCATION":
+              cur.location = prop.value;
+              break;
           }
         }
+
         return events;
       }
-      function fmtTime(d) {
-        return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-      }
-      function fmtWhen(ev, now) {
-        const sameDay = ev.DTSTART.toDateString() === now.toDateString();
-        const allDay =
-          ev.DTSTART.getHours() === 0 && ev.DTSTART.getMinutes() === 0 && !ev.DTEND;
-        if (allDay) return sameDay ? "All day" : ev.DTSTART.toLocaleDateString(undefined, { weekday: "short" });
-        if (sameDay) return fmtTime(ev.DTSTART);
-        return ev.DTSTART.toLocaleDateString(undefined, { weekday: "short" }) + " " + fmtTime(ev.DTSTART);
-      }
-      async function loadAgenda() {
-        const el = document.getElementById("agenda");
-        if (!config.ical_url) {
-          el.className = "empty";
-          el.textContent = "Configure ical_url to show events.";
-          return;
-        }
-        try {
-          const r = await fetch(config.ical_url);
-          if (!r.ok) throw new Error("HTTP " + r.status);
-          const text = await r.text();
-          const now = new Date();
-          const horizon = new Date(now.getTime() + 36 * 3600 * 1000);
-          const events = parseIcs(text)
-            .filter((e) => e.DTSTART >= now && e.DTSTART <= horizon)
-            .sort((a, b) => a.DTSTART - b.DTSTART)
-            .slice(0, config.events_to_show || 6);
-          if (events.length === 0) {
-            el.className = "empty";
-            el.textContent = "Nothing on the schedule.";
-            return;
-          }
-          el.className = "";
-          el.innerHTML = "";
-          for (const ev of events) {
-            const row = document.createElement("div");
-            row.className = "ev";
-            row.innerHTML =
-              '<div class="when">' + fmtWhen(ev, now) + '</div>' +
-              '<div><div class="what">' + (ev.SUMMARY || "—") + '</div>' +
-              (ev.LOCATION ? '<div class="loc">' + ev.LOCATION + '</div>' : '') +
-              '</div>';
-            el.appendChild(row);
-          }
-        } catch (e) {
-          el.className = "err";
-          el.textContent = "Could not load calendar: " + e;
-        }
-      }
-      loadAgenda();
-      setInterval(loadAgenda, 10 * 60 * 1000);
 
-      parent.postMessage({ type: "builtin_ready", id: "agenda-board" }, "*");
+      function clampInt(value, min, max, fallback) {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return fallback;
+        return Math.max(min, Math.min(max, Math.round(n)));
+      }
     </script>
   </body>
 </html>
