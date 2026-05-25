@@ -1,16 +1,62 @@
 {
   "id": "weather",
   "name": "Weather",
-  "description": "Current conditions + 5-day forecast from Open-Meteo (no API key required).",
+  "description": "Current conditions and multi-day forecast from Open-Meteo (no API key required).",
   "config_schema": {
     "type": "object",
     "required": ["latitude", "longitude"],
     "properties": {
-      "latitude": { "type": "number" },
-      "longitude": { "type": "number" },
-      "location_label": { "type": "string", "default": "" },
-      "units": { "type": "string", "enum": ["metric", "imperial"], "default": "metric" },
-      "forecast_days": { "type": "integer", "minimum": 1, "maximum": 7, "default": 5 }
+      "theme": {
+        "type": "string",
+        "enum": ["auto", "light", "dark", "midnight"],
+        "default": "auto",
+        "description": "Color scheme. Auto follows the device/OS preference."
+      },
+      "font_scale": {
+        "type": "number",
+        "minimum": 0.5,
+        "maximum": 2,
+        "format": "range",
+        "default": 1,
+        "description": "Scale all typography (0.5×–2×)."
+      },
+      "font_family": {
+        "type": "string",
+        "enum": ["geist", "system", "serif", "mono"],
+        "default": "geist",
+        "description": "Typeface for labels and temperatures."
+      },
+      "accent_color": {
+        "type": "string",
+        "format": "color",
+        "description": "Accent color for icons and highlights. Leave empty for theme default."
+      },
+      "latitude": { "type": "number", "description": "Decimal degrees north (negative for south)." },
+      "longitude": { "type": "number", "description": "Decimal degrees east (negative for west)." },
+      "location_label": {
+        "type": "string",
+        "default": "",
+        "description": "Friendly place name shown under the temperature."
+      },
+      "units": {
+        "type": "string",
+        "enum": ["metric", "imperial"],
+        "default": "metric",
+        "description": "Temperature units for current conditions and forecast."
+      },
+      "forecast_days": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 7,
+        "default": 5,
+        "description": "Number of daily forecast tiles (including today)."
+      },
+      "icon_style": {
+        "type": "string",
+        "enum": ["line", "filled", "emoji"],
+        "default": "line",
+        "description": "Weather icon style: SVG outline, SVG filled, or emoji."
+      }
     }
   }
 }
