@@ -15,10 +15,16 @@ body {
   cursor: none !important;
 }
 
+:root {
+  --screen-scale: 1;
+}
+
 #builtins,
 #overlay {
   position: fixed;
   inset: 0;
+  transform: scale(var(--screen-scale));
+  transform-origin: center;
 }
 
 #builtins > iframe {
@@ -35,7 +41,33 @@ body {
 
 #builtins > iframe[data-active="true"] {
   opacity: 1;
-  pointer-events: auto;
+  pointer-events: none;
+}
+
+:root[data-orientation="90"] #builtins,
+:root[data-orientation="90"] #overlay,
+:root[data-orientation="270"] #builtins,
+:root[data-orientation="270"] #overlay {
+  inset: auto;
+  top: 50%;
+  left: 50%;
+  width: 100vh;
+  height: 100vw;
+}
+
+:root[data-orientation="90"] #builtins,
+:root[data-orientation="90"] #overlay {
+  transform: translate(-50%, -50%) rotate(90deg) scale(var(--screen-scale));
+}
+
+:root[data-orientation="180"] #builtins,
+:root[data-orientation="180"] #overlay {
+  transform: rotate(180deg) scale(var(--screen-scale));
+}
+
+:root[data-orientation="270"] #builtins,
+:root[data-orientation="270"] #overlay {
+  transform: translate(-50%, -50%) rotate(270deg) scale(var(--screen-scale));
 }
 
 #overlay {

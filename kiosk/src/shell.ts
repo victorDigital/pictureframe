@@ -2,7 +2,7 @@
 // transition overlay layer. Speaks the versioned WebSocket protocol
 // described in SPEC §4.4.
 
-const PROTOCOL_VERSION = 4;
+const PROTOCOL_VERSION = 5;
 
 type ScreenInfo = {
   id: string;
@@ -27,7 +27,8 @@ type CoreMsg =
   | { type: "show_overlay_color"; color: string; transitionMs: number }
   | { type: "show_loading_hint"; label: string }
   | { type: "hide_loading_hint" }
-  | { type: "hide_overlay"; transitionMs: number };
+  | { type: "hide_overlay"; transitionMs: number }
+  | { type: "set_display_geometry"; scale: number; orientation: "normal" | "90" | "180" | "270" };
 
 const builtinsRoot = document.getElementById("builtins")!;
 const overlayEl = document.getElementById("overlay")!;
@@ -50,6 +51,11 @@ function setStatus(text: string | null) {
 
 function setTransitionMs(ms: number) {
   document.documentElement.style.setProperty("--transition-ms", `${ms}ms`);
+}
+
+function setDisplayGeometry(scale: number, orientation: "normal" | "90" | "180" | "270") {
+  document.documentElement.style.setProperty("--screen-scale", String(scale || 1));
+  document.documentElement.dataset.orientation = orientation;
 }
 
 function builtinUrl(screen: ScreenInfo): string {
@@ -212,6 +218,9 @@ function handle(msg: CoreMsg) {
       break;
     case "hide_overlay":
       hideOverlay(msg.transitionMs);
+      break;
+    case "set_display_geometry":
+      setDisplayGeometry(msg.scale, msg.orientation);
       break;
   }
 }

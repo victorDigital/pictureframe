@@ -5,6 +5,31 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-05-26
+
+### Added
+
+- The updater now has an explicit OS-package phase. Releases can declare
+  required Debian/Ubuntu packages through `deploy/install-os-packages.sh`; the
+  updater installs them through a narrow sudo helper when the device has been
+  provisioned with the current sudoers fragment.
+- The Updates UI now shows the current phase, recent in-memory phase events,
+  warnings, and recent updater logs instead of only the final result.
+- The kiosk shell applies display scale/orientation itself and reloads through
+  shell protocol v5, so these settings are visible even before `wlr-randr` is
+  installed.
+
+### Fixed
+
+- Current version comparison now treats `0.0.x` and `v0.0.x` as the same
+  release.
+- Display on/off now reports a clear missing-package error instead of raw
+  `spawn wlr-randr ENOENT`.
+- VNC startup failures now surface the `wayvnc` exit output in the VNC panel
+  instead of only showing a later proxy connection refusal.
+- Built-in screens no longer receive pointer events from the kiosk shell, which
+  keeps the parent shell cursor-hiding style active.
+
 ## [0.0.3] - 2026-05-26
 
 ### Fixed

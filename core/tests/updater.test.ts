@@ -112,3 +112,53 @@ test("a tag matching the current version clears available", async () => {
   await updater.checkNow();
   assert.equal(updater.status().available, undefined);
 });
+
+test("a v-prefixed tag matching a bare package version clears available", async () => {
+  const release: ReleaseInfo = {
+    tag: "v1.0.0",
+    publishedAt: new Date().toISOString(),
+    prerelease: false,
+    tarballUrl: "x",
+  };
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "frame-upd-"));
+  const tokenFile = path.join(tmp, "bearer_token");
+  const screensFile = path.join(tmp, "screens.yaml");
+  const configFile = path.join(tmp, "frame.yaml");
+  await fs.writeFile(tokenFile, "x".repeat(24));
+  await fs.writeFile(screensFile, "screens: []");
+  const config: FrameConfig = {
+    device: { name: "t", bearer_token_file: tokenFile },
+    display: { brightness_backend: "none", default_brightness: 60, scale: 1, orientation: "normal" },
+    screens_file: screensFile,
+    default_screen: "clock",
+    manual_pinned_timeout_hours: 4,
+    scheduler: { max_preloaded_url_screens: 5 },
+    updater: {
+      repo: "victorDigital/pictureframe",
+      channel: "stable",
+      poll_interval_min: 15,
+      auto_apply: false,
+      staging_delay_hours: 24,
+      health_check_window_sec: 60,
+      retain_releases: 3,
+    },
+    ha: { enabled: false },
+    builtins: {},
+  };
+  const screens: Screen[] = [
+    { id: "clock", name: "Clock", type: "builtin", source: "clock", preload: true },
+  ];
+  const store = new ConfigStore(configFile, {
+    ok: true,
+    loaded: {
+      config,
+      screens,
+      bearerToken: "x".repeat(24),
+      configPath: configFile,
+      screensPath: screensFile,
+    },
+  });
+  const updater = new Updater(store, "1.0.0", new FakeGitHub(release));
+  await updater.checkNow();
+  assert.equal(updater.status().available, undefined);
+});

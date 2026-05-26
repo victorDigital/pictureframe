@@ -273,7 +273,8 @@ cat > /etc/sudoers.d/frame <<'EOF'
 # Brightness does NOT go through sudo (udev rule grants direct access).
 frame ALL=(root) NOPASSWD: /usr/bin/systemctl restart frame-core, \
                             /usr/bin/systemctl restart frame-kiosk, \
-                            /usr/bin/systemctl reboot
+                            /usr/bin/systemctl reboot, \
+                            /opt/frame/current/deploy/install-os-packages.sh
 EOF
 chmod 0440 /etc/sudoers.d/frame
 visudo -cf /etc/sudoers.d/frame >/dev/null

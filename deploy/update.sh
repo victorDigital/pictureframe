@@ -20,6 +20,9 @@ curl -fsSL "https://api.github.com/repos/$REPO/tarball/$TAG" \
   | tar -xz --strip-components=1 -C "$STAGING"
 
 cd "$STAGING"
+if [[ -x "$STAGING/deploy/install-os-packages.sh" ]]; then
+  sudo "$STAGING/deploy/install-os-packages.sh"
+fi
 npm ci
 npm run build
 npm prune --omit=dev

@@ -28,6 +28,7 @@ type VncStatus = {
   wsUrl?: string;
   wsPort: number;
   vncPort: number;
+  lastError?: string;
 };
 
 export function VncSection() {
@@ -150,6 +151,7 @@ export function VncSection() {
             </>
           ) : (
             <>
+              {status.lastError && <ErrorAlert message={status.lastError} />}
               <CardDescription>
                 Starts wayvnc and websockify on demand. The bundled noVNC client connects through{" "}
                 <code className="rounded bg-muted px-1 py-0.5 text-[10px]">

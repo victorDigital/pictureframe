@@ -67,6 +67,15 @@ async function main() {
   const updater = new Updater(store, version);
   const vnc = new VncSupervisor(store.current.config.vnc?.password_file);
 
+  function sendDisplayGeometry() {
+    const display = store.current.config.display;
+    shell.send({
+      type: "set_display_geometry",
+      scale: display.scale ?? 1,
+      orientation: display.orientation ?? "normal",
+    });
+  }
+
   async function pushState(activeId: string | null) {
     let brightnessValue: number | null = null;
     try {
@@ -113,6 +122,7 @@ async function main() {
     scheduler.setPinnedTimeoutHours(cfg.manual_pinned_timeout_hours);
     screens.setMaxPreloaded(cfg.scheduler.max_preloaded_url_screens);
     brightness.updateConfig(cfg);
+    sendDisplayGeometry();
     brightness.applyDisplayConfig().catch((err) =>
       log.warn({ err }, "could not apply display geometry"),
     );
@@ -136,6 +146,7 @@ async function main() {
   // attaches, replay whatever the scheduler picked as the active screen
   // so the iframe activates.
   shell.on("connect", () => {
+    sendDisplayGeometry();
     const active = screens.currentScreen;
     if (active) {
       screens.show(active, 0).catch((err) =>

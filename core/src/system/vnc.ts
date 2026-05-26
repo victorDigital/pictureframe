@@ -22,6 +22,7 @@ export type VncStatus = {
   wsUrl?: string;
   wsPort: number;
   vncPort: number;
+  lastError?: string;
 };
 
 export class VncSupervisor {
@@ -32,6 +33,8 @@ export class VncSupervisor {
   private startedAt?: number;
   private idleTimer?: NodeJS.Timeout;
   private runtimeDir: string;
+  private lastError?: string;
+  private wayvncOutput = "";
 
   constructor(private passwordFile?: string) {
     this.runtimeDir = paths.runtimeDir;
@@ -48,6 +51,7 @@ export class VncSupervisor {
       wsUrl: this.wayvnc ? `/vnc/ws` : undefined,
       wsPort: WS_PORT,
       vncPort: VNC_PORT,
+      lastError: this.lastError,
     };
   }
 
@@ -56,6 +60,8 @@ export class VncSupervisor {
       this.markActive();
       return this.status();
     }
+    this.lastError = undefined;
+    this.wayvncOutput = "";
 
     await fs.mkdir(this.runtimeDir, { recursive: true });
     const configFile = path.join(this.runtimeDir, "wayvnc.conf");
@@ -101,9 +107,16 @@ export class VncSupervisor {
         env: { ...process.env, ...wlEnv },
       },
     );
-    this.wayvnc.stdout?.pipe(this.wayvncLog, { end: false });
-    this.wayvnc.stderr?.pipe(this.wayvncLog, { end: false });
+    this.wayvnc.stdout?.on("data", (chunk) => {
+      this.captureWayvncOutput(chunk);
+      this.wayvncLog?.write(chunk);
+    });
+    this.wayvnc.stderr?.on("data", (chunk) => {
+      this.captureWayvncOutput(chunk);
+      this.wayvncLog?.write(chunk);
+    });
     this.wayvnc.on("exit", (code, signal) => {
+      this.lastError = `wayvnc exited code=${code ?? "null"} signal=${signal ?? "null"}${this.wayvncOutput ? `: ${this.wayvncOutput}` : ""}`;
       log.warn({ code, signal }, "wayvnc exited");
       this.wayvnc = undefined;
       this.websockify?.kill("SIGTERM");
@@ -132,11 +145,16 @@ export class VncSupervisor {
       this.websockifyLog = undefined;
     });
     this.websockify.on("error", (err) => {
+      this.lastError = `websockify spawn error: ${err.message}`;
       log.error({ err }, "websockify spawn error (is the package installed?)");
     });
 
     this.startedAt = Date.now();
     this.markActive();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    if (!this.wayvnc) {
+      throw new Error(this.lastError ?? "wayvnc exited during startup");
+    }
     return this.status();
   }
 
@@ -156,6 +174,10 @@ export class VncSupervisor {
       log.info("vnc idle timeout reached; stopping");
       this.stop();
     }, IDLE_TIMEOUT_MS);
+  }
+
+  private captureWayvncOutput(chunk: Buffer | string) {
+    this.wayvncOutput = `${this.wayvncOutput}${String(chunk)}`.slice(-2000).trim();
   }
 }
 

@@ -1,6 +1,6 @@
 import { Screen } from "../config/schema.js";
 
-export const SHELL_PROTOCOL_VERSION = 4;
+export const SHELL_PROTOCOL_VERSION = 5;
 
 export type CoreToShell =
   | { type: "welcome"; protocolVersion: number }
@@ -16,6 +16,11 @@ export type CoreToShell =
   | { type: "show_loading_hint"; label: string }
   | { type: "hide_loading_hint" }
   | { type: "hide_overlay"; transitionMs: number }
+  | {
+      type: "set_display_geometry";
+      scale: number;
+      orientation: "normal" | "90" | "180" | "270";
+    }
   | {
       type: "state";
       payload: {

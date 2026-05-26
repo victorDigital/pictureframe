@@ -30,7 +30,12 @@ export type UpdaterStatus = {
   available?: { tag: string; firstSeenAt: string; appliedAfter: string; prerelease: boolean };
   lastResult?: "success" | "failed" | "rolled_back";
   lastError?: string;
+  lastWarning?: string;
   busy: boolean;
+  phase: string;
+  phaseDetail?: string;
+  phaseStartedAt?: string;
+  events: Array<{ at: string; phase: string; detail?: string; level: "info" | "warn" | "error" }>;
   channel: "stable" | "beta";
   autoApply: boolean;
   safeMode: boolean;
@@ -54,6 +59,8 @@ export class Updater {
     this.status_ = {
       current: currentVersion,
       busy: false,
+      phase: "idle",
+      events: [],
       channel: store.current.config.updater.channel,
       autoApply: store.current.config.updater.auto_apply,
       safeMode: store.isSafeMode(),
@@ -69,7 +76,7 @@ export class Updater {
   }
 
   status(): UpdaterStatus {
-    return { ...this.status_, busy: this.busy };
+    return { ...this.status_, busy: this.busy, events: [...this.status_.events] };
   }
 
   start() {
@@ -96,10 +103,15 @@ export class Updater {
     if (this.busy) return;
     const cfg = this.store.current.config.updater;
     try {
+      this.setPhase("checking", `Checking ${cfg.repo} ${cfg.channel}`);
       const release = await this.gh.latestForChannel(cfg.channel);
-      if (!release) return;
-      if (release.tag === this.currentVersion) {
+      if (!release) {
+        this.setPhase("idle", "No release found");
+        return;
+      }
+      if (sameVersion(release.tag, this.currentVersion)) {
         this.status_.available = undefined;
+        this.setPhase("idle", `Already on ${release.tag}`);
         return;
       }
       if (this.quarantine.has(release.tag)) {
@@ -107,6 +119,7 @@ export class Updater {
         // The operator can clear it from the UI / API when they've fixed
         // whatever was wrong.
         this.status_.available = undefined;
+        this.setPhase("idle", `${release.tag} is quarantined`, "warn");
         return;
       }
       const isFirstSighting = !this.firstSeen.has(release.tag);
@@ -131,8 +144,11 @@ export class Updater {
       };
       if (cfg.auto_apply && new Date(appliedAfter) <= new Date()) {
         await this.applyTag(release, { force: false });
+      } else {
+        this.setPhase("idle", `Found ${release.tag}`);
       }
     } catch (err) {
+      this.setPhase("failed", String(err), "error");
       log.error({ err }, "poll failed");
     }
   }
@@ -169,22 +185,27 @@ export class Updater {
     const historyFile = path.join(paths.stateDir, "migrations.json");
 
     try {
+      this.status_.lastWarning = undefined;
+      this.setPhase("download", `Downloading ${tag}`);
       await fs.mkdir(paths.runtimeDir, { recursive: true });
       await this.gh.downloadTarball(release.tarballUrl, tarballPath);
 
       // Optional GPG signature verification.
       const cfg = this.store.current.config.updater;
       if (cfg.signing_key_file) {
+        this.setPhase("verify", "Verifying release signature");
         if (!release.signatureAssetUrl) {
           throw new Error("signing_required_but_asset_missing");
         }
         await this.verifySignature(tarballPath, release.signatureAssetUrl, cfg.signing_key_file);
       }
 
+      this.setPhase("extract", `Extracting ${tag}`);
       await fs.rm(staging, { recursive: true, force: true });
       await fs.mkdir(staging, { recursive: true });
       await tar.x({ file: tarballPath, cwd: staging, strip: 1 });
 
+      this.setPhase("migrations", "Checking migration history");
       const history = await loadHistory(historyFile);
       const migrations = await discoverMigrations(path.join(staging, "migrations"));
       const integrity = await verifyHistoryIntegrity(history, migrations);
@@ -192,6 +213,7 @@ export class Updater {
         throw new Error(`migration_history_diverged: ${integrity.reason}`);
       }
 
+      this.setPhase("snapshot", "Snapshotting config");
       const snapshotDir = await snapshotConfig({
         fromTag: from,
         toTag: tag,
@@ -200,15 +222,21 @@ export class Updater {
         snapshotsDir: paths.snapshotsDir,
       });
 
+      await this.ensureOsPackages(staging);
+
+      this.setPhase("dependencies", "Installing npm dependencies");
       const buildEnv = {
         ...process.env,
         NODE_ENV: "development",
         npm_config_production: "false",
       };
       await exec("npm", ["ci", "--include=dev"], { cwd: staging, env: buildEnv });
+      this.setPhase("build", "Building staged release");
       await exec("npm", ["run", "build"], { cwd: staging, env: buildEnv });
+      this.setPhase("prune", "Pruning dev dependencies");
       await exec("npm", ["prune", "--omit=dev"], { cwd: staging });
 
+      this.setPhase("migrations", "Applying migrations");
       const migResult = await applyPending({
         history,
         migrations,
@@ -223,11 +251,13 @@ export class Updater {
       // SPEC §5.2 step 7 / §5.8: pre-flight the staged release on :8081
       // before touching `current`. If it doesn't come up healthy we never
       // restart the live frame-core.
+      this.setPhase("preflight", "Starting staged release health check");
       const preflight = await preflightCheck({ stagingDir: staging });
       if (!preflight.ok) {
         throw new Error(`preflight_failed: ${preflight.reason}`);
       }
 
+      this.setPhase("swap", "Switching current symlink");
       await fs.rename(staging, finalDest);
       await fs.symlink(finalDest, paths.current + ".new").catch(async () => {
         await fs.rm(paths.current + ".new", { force: true });
@@ -235,7 +265,9 @@ export class Updater {
       });
       await fs.rename(paths.current + ".new", paths.current);
 
+      this.setPhase("restart", "Restarting frame-core");
       await exec("sudo", ["/usr/bin/systemctl", "restart", "frame-core"]);
+      this.setPhase("health", "Waiting for frame-core health check");
       const healthy = await this.waitHealthy(this.store.current.config.updater.health_check_window_sec);
       if (!healthy) {
         await this.rollbackTo(from, snapshotDir);
@@ -256,6 +288,7 @@ export class Updater {
       this.status_.available = undefined;
       this.status_.lastResult = "success";
       this.status_.lastError = undefined;
+      this.setPhase("success", `Applied ${tag}`);
       await pruneSnapshots(paths.snapshotsDir, this.store.current.config.updater.retain_releases);
       await logUpdaterEvent({ level: "info", msg: "release applied", tag, from });
       return { ok: true, tag };
@@ -263,6 +296,7 @@ export class Updater {
       log.error({ err }, "apply failed");
       this.status_.lastResult = "failed";
       this.status_.lastError = String(err);
+      this.setPhase("failed", String(err), "error");
       await this.quarantine.add(tag, String(err).slice(0, 200));
       this.status_.available = undefined;
       await logUpdaterEvent({
@@ -276,6 +310,39 @@ export class Updater {
     } finally {
       this.busy = false;
       await fs.rm(tarballPath, { force: true });
+    }
+  }
+
+  private async ensureOsPackages(staging: string) {
+    if (process.platform !== "linux") return;
+    const required = await releaseOsPackages(staging);
+    if (required.length === 0) return;
+    const missing = await missingPackages(required);
+    if (missing.length === 0) {
+      this.setPhase("os-packages", "Required OS packages are present");
+      return;
+    }
+    this.setPhase("os-packages", `Installing OS packages: ${missing.join(", ")}`);
+    const helper = path.join(paths.current, "deploy", "install-os-packages.sh");
+    try {
+      await fs.mkdir(paths.runtimeDir, { recursive: true });
+      await fs.writeFile(
+        path.join(paths.runtimeDir, "os-packages.required"),
+        `${missing.join("\n")}\n`,
+      );
+      await exec("sudo", ["-n", helper]);
+      this.setPhase("os-packages", `Installed OS packages: ${missing.join(", ")}`);
+      return;
+    } catch (err) {
+      const command = `sudo ${helper}`;
+      const msg = `OS packages missing (${missing.join(", ")}). Run '${command}' once on the device, then retry the update.`;
+      this.status_.lastWarning = msg;
+      this.setPhase("os-packages", msg, "warn");
+      await logUpdaterEvent({
+        level: "warn",
+        msg: "OS package install needs sudo setup",
+        details: { missing, command, error: String(err) },
+      });
     }
   }
 
@@ -361,4 +428,50 @@ export class Updater {
       return { unit: safeUnit, lines: [] as string[] };
     }
   }
+
+  private setPhase(
+    phase: string,
+    detail?: string,
+    level: "info" | "warn" | "error" = "info",
+  ) {
+    const at = new Date().toISOString();
+    this.status_.phase = phase;
+    this.status_.phaseDetail = detail;
+    this.status_.phaseStartedAt = at;
+    this.status_.events = [
+      ...this.status_.events.slice(-19),
+      { at, phase, detail, level },
+    ];
+    void logUpdaterEvent({ level, msg: `phase:${phase}`, details: detail });
+  }
+}
+
+async function releaseOsPackages(staging: string): Promise<string[]> {
+  const helper = path.join(staging, "deploy", "install-os-packages.sh");
+  try {
+    const { stdout } = await exec("bash", [helper, "--print"]);
+    return stdout.split(/\s+/).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+async function missingPackages(packages: string[]): Promise<string[]> {
+  const missing: string[] = [];
+  for (const pkg of packages) {
+    try {
+      await exec("dpkg-query", ["-W", "-f=${db:Status-Abbrev}", pkg]);
+    } catch {
+      missing.push(pkg);
+    }
+  }
+  return missing;
+}
+
+function sameVersion(a: string, b: string): boolean {
+  return normalizeVersion(a) === normalizeVersion(b);
+}
+
+function normalizeVersion(version: string): string {
+  return version.trim().replace(/^v/i, "");
 }

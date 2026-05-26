@@ -32,7 +32,12 @@ type Status = {
   available?: { tag: string; firstSeenAt: string; appliedAfter: string; prerelease: boolean };
   lastResult?: string;
   lastError?: string;
+  lastWarning?: string;
   busy: boolean;
+  phase: string;
+  phaseDetail?: string;
+  phaseStartedAt?: string;
+  events: Array<{ at: string; phase: string; detail?: string; level: "info" | "warn" | "error" }>;
   channel: string;
   autoApply: boolean;
 };
@@ -41,19 +46,22 @@ export function UpdatesSection() {
   const [status, setStatus] = useState<Status | null>(null);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [quarantined, setQuarantined] = useState<QuarantinedTag[]>([]);
+  const [logs, setLogs] = useState<string[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function refresh() {
     try {
-      const [s, snap, q] = await Promise.all([
+      const [s, snap, q, log] = await Promise.all([
         api<Status>("/api/updates"),
         api<{ snapshots: Snapshot[] }>("/api/updates/snapshots"),
         api<{ quarantined: QuarantinedTag[] }>("/api/updates/quarantine"),
+        api<{ lines: string[] }>("/api/logs?unit=frame-core&subsystem=updater&lines=80"),
       ]);
       setStatus(s);
       setSnapshots(snap.snapshots);
       setQuarantined(q.quarantined);
+      setLogs(log.lines);
     } catch (e) {
       setErr(String(e instanceof Error ? e.message : e));
     }
@@ -160,6 +168,13 @@ export function UpdatesSection() {
             <span className="font-mono font-medium">{status.current}</span>
             <span className="text-muted-foreground">Channel</span>
             <span><Badge variant="outline">{status.channel}</Badge></span>
+            <span className="text-muted-foreground">Phase</span>
+            <span>
+              <Badge variant={status.busy ? "secondary" : "outline"}>{status.phase}</Badge>
+              {status.phaseDetail && (
+                <span className="ml-2 text-muted-foreground">{status.phaseDetail}</span>
+              )}
+            </span>
           </div>
           {status.available ? (
             <div className="rounded-md border border-primary/30 bg-primary/5 p-3 space-y-1">
@@ -225,6 +240,42 @@ export function UpdatesSection() {
               {status.lastError && ` — ${status.lastError}`}
             </p>
           )}
+          {status.lastWarning && (
+            <ErrorAlert message={status.lastWarning} />
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-muted-foreground">Update activity</CardTitle>
+          <CardDescription>Live phase changes and recent updater logs.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {status.events.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No in-memory update events yet.</p>
+          ) : (
+            <div className="divide-y divide-border/60">
+              {status.events.slice().reverse().map((event, index) => (
+                <div key={`${event.at}-${index}`} className="py-2 first:pt-0">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <Badge variant={event.level === "error" ? "destructive" : "outline"}>
+                      {event.phase}
+                    </Badge>
+                    <span className="text-muted-foreground">
+                      {new Date(event.at).toLocaleString()}
+                    </span>
+                  </div>
+                  {event.detail && (
+                    <div className="mt-1 text-[10px] text-muted-foreground">{event.detail}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          <pre className="max-h-64 overflow-auto rounded-md border border-border/60 bg-muted/40 p-3 font-mono text-[10px] leading-relaxed whitespace-pre-wrap break-words">
+            {logs.length === 0 ? "(no updater log lines)" : logs.join("\n")}
+          </pre>
         </CardContent>
       </Card>
 

@@ -86,11 +86,18 @@ export class Brightness {
 
   async displayPower(state: "on" | "off"): Promise<{ ok: true }> {
     const env = { ...process.env, ...(await wlSessionEnv()) };
-    try {
-      await exec("wlopm", [state === "off" ? "--off" : "--on", "*"], { env });
-      return { ok: true };
-    } catch (err) {
-      log.warn({ err: String(err) }, "wlopm failed; trying wlr-randr");
+    if (await commandExists("wlopm")) {
+      try {
+        await exec("wlopm", [state === "off" ? "--off" : "--on", "*"], { env });
+        return { ok: true };
+      } catch (err) {
+        log.warn({ err: String(err) }, "wlopm failed; trying wlr-randr");
+      }
+    }
+    if (!(await commandExists("wlr-randr"))) {
+      throw new Error(
+        "display_power_missing_package: install wlr-randr or wlopm; run sudo /opt/frame/current/deploy/install-os-packages.sh on the device",
+      );
     }
     const { stdout } = await exec("wlr-randr", [], { env });
     const outputs = parseWlrOutputs(stdout);
@@ -108,6 +115,13 @@ export class Brightness {
     const scale = this.cfg.display.scale ?? 1;
     const orientation = this.cfg.display.orientation ?? "normal";
     if (scale === 1 && orientation === "normal") return;
+    if (!(await commandExists("wlr-randr"))) {
+      log.warn(
+        { scale, orientation },
+        "wlr-randr missing; hardware display geometry not applied",
+      );
+      return;
+    }
     const env = { ...process.env, ...(await wlSessionEnv()) };
     const { stdout } = await exec("wlr-randr", [], { env });
     const outputs = parseWlrOutputs(stdout);
@@ -131,6 +145,15 @@ export class Brightness {
       log.warn({ configured, detected }, "using detected backlight device");
     }
     return detected ?? configured;
+  }
+}
+
+async function commandExists(command: string): Promise<boolean> {
+  try {
+    await exec("sh", ["-c", `command -v ${command}`]);
+    return true;
+  } catch {
+    return false;
   }
 }
 
