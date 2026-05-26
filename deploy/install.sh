@@ -138,7 +138,6 @@ BASE_PACKAGES=(
   jq
   ddcutil
   wlr-randr
-  ydotool
   websockify
   novnc
   avahi-daemon
@@ -153,6 +152,7 @@ BASE_PACKAGES=(
 log "Installing base packages: ${BASE_PACKAGES[*]}"
 apt-get install -y -qq "${BASE_PACKAGES[@]}"
 apt-get install -y -qq wlopm 2>/dev/null || warn "wlopm unavailable; display power will fall back to wlr-randr"
+apt-get install -y -qq ydotool 2>/dev/null || warn "ydotool unavailable; cursor nudge will be skipped"
 
 if [[ "$BACKPORTS_NEEDED" -eq 1 ]]; then
   log "Installing cage from bookworm-backports"

@@ -12,7 +12,6 @@ PACKAGE_ALLOWLIST=(
   ddcutil
   cage
   chromium
-  ydotool
 )
 
 REMOUNTED_TARGETS=()

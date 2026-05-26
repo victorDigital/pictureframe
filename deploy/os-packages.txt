@@ -1,3 +1,2 @@
 # Required OS packages for releases.
 wlr-randr
-ydotool

@@ -5,6 +5,13 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.14] - 2026-05-27
+
+### Fixed
+
+- Fresh installs no longer fail when `ydotool` is unavailable from the
+  distribution package sources; cursor nudging is now optional.
+
 ## [0.0.13] - 2026-05-27
 
 ### Fixed
