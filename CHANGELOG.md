@@ -5,6 +5,13 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.12] - 2026-05-26
+
+### Fixed
+
+- Updater npm commands now use a writable state-directory home and cache so
+  `npm ci` no longer fails when `/home/frame` is mounted read-only.
+
 ## [0.0.11] - 2026-05-26
 
 ### Fixed

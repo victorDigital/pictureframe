@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { Updater } from "../src/updater/index.js";
+import { npmUpdateEnv, Updater } from "../src/updater/index.js";
 import { ConfigStore } from "../src/config/state.js";
 import { GitHubClient, ReleaseInfo } from "../src/updater/githubClient.js";
 import type { FrameConfig, Screen } from "../src/config/schema.js";
@@ -161,4 +161,17 @@ test("a v-prefixed tag matching a bare package version clears available", async 
   const updater = new Updater(store, "1.0.0", new FakeGitHub(release));
   await updater.checkNow();
   assert.equal(updater.status().available, undefined);
+});
+
+test("npmUpdateEnv keeps npm cache and home inside the writable state dir", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "frame-npm-env-"));
+  const env = await npmUpdateEnv(tmp, { PATH: "/bin", HOME: "/home/frame" });
+
+  assert.equal(env.HOME, path.join(tmp, "npm-home"));
+  assert.equal(env.npm_config_cache, path.join(tmp, "npm-cache"));
+  assert.equal(env.NODE_ENV, "development");
+  assert.equal(env.npm_config_update_notifier, "false");
+  assert.equal(env.PATH, "/bin");
+  assert.doesNotMatch(env.npm_config_cache!, /^\/home\/frame\b/);
+  await assert.doesNotReject(() => fs.access(env.npm_config_cache!));
 });

@@ -25,6 +25,23 @@ import { releaseOsPackages } from "./osPackages.js";
 const log = sub("updater");
 const rootHelper = "/usr/local/lib/frame/root-helper";
 
+export async function npmUpdateEnv(
+  stateDir = paths.stateDir,
+  baseEnv: NodeJS.ProcessEnv = process.env,
+): Promise<NodeJS.ProcessEnv> {
+  const home = path.join(stateDir, "npm-home");
+  const cache = path.join(stateDir, "npm-cache");
+  await fs.mkdir(home, { recursive: true });
+  await fs.mkdir(cache, { recursive: true });
+  return {
+    ...baseEnv,
+    HOME: home,
+    NODE_ENV: "development",
+    npm_config_cache: cache,
+    npm_config_update_notifier: "false",
+  };
+}
+
 export type UpdaterStatus = {
   current: string;
   available?: { tag: string; firstSeenAt: string; appliedAfter: string; prerelease: boolean };
@@ -225,11 +242,7 @@ export class Updater {
       await this.ensureOsPackages(staging);
 
       this.setPhase("dependencies", "Installing npm dependencies");
-      const buildEnv = {
-        ...process.env,
-        NODE_ENV: "development",
-        npm_config_production: "false",
-      };
+      const buildEnv = await npmUpdateEnv();
       await runCommand(
         "npm",
         ["ci", "--include=dev", "--no-audit", "--no-fund", "--loglevel=warn"],
@@ -245,7 +258,7 @@ export class Updater {
       await runCommand(
         "npm",
         ["prune", "--omit=dev", "--no-audit", "--no-fund", "--loglevel=warn"],
-        { cwd: staging, logName: "npm-prune.log" },
+        { cwd: staging, env: buildEnv, logName: "npm-prune.log" },
       );
 
       this.setPhase("migrations", "Applying migrations");
