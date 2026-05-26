@@ -23,9 +23,9 @@ cd "$STAGING"
 if [[ -x "$STAGING/deploy/install-os-packages.sh" ]]; then
   sudo "$STAGING/deploy/install-os-packages.sh"
 fi
-npm ci
+npm ci --include=dev --no-audit --no-fund --loglevel=warn
 npm run build
-npm prune --omit=dev
+npm prune --omit=dev --no-audit --no-fund --loglevel=warn
 
 mv "$STAGING" "$RELEASE"
 ln -snf "$RELEASE" /opt/frame/current

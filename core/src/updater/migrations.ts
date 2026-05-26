@@ -1,12 +1,26 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { execFile, type ExecFileOptions } from "node:child_process";
 import YAML from "yaml";
 import { sub } from "../util/logger.js";
 
-const exec = promisify(execFile);
+const commandMaxBuffer = 64 * 1024 * 1024;
+const exec = (file: string, args: string[] = [], options: ExecFileOptions = {}) =>
+  new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+    execFile(
+      file,
+      args,
+      { ...options, encoding: "utf8", maxBuffer: commandMaxBuffer },
+      (err, stdout, stderr) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve({ stdout: String(stdout), stderr: String(stderr) });
+      },
+    );
+  });
 const log = sub("updater.migrations");
 
 export type AppliedMigration = {

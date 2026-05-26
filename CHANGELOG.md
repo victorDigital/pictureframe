@@ -5,6 +5,17 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-05-26
+
+### Fixed
+
+- The updater now uses a larger bounded command-output buffer for npm,
+  migration, sudo, and log commands, preventing
+  `ERR_CHILD_PROCESS_STDIO_MAXBUFFER` during verbose package installs.
+- Device npm install/prune commands now run with audit, fund, and noisy logs
+  disabled; the release tarball includes `.npmrc` so already-installed
+  updaters get the quieter behavior while applying this release.
+
 ## [0.0.4] - 2026-05-26
 
 ### Added

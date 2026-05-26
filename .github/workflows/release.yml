@@ -52,8 +52,8 @@ jobs:
           stage="$(mktemp -d)"
           out="$stage/frame-${GITHUB_REF_NAME}.tar.gz"
           # Bundle source + built dist/ trees. Excludes node_modules so we
-          # stay small; the device runs `npm ci --omit=dev` in the staging
-          # area as part of the apply flow (SPEC §5.2 step 5).
+          # stay small; the device installs, builds, then prunes dependencies
+          # in the staging area as part of the apply flow (SPEC §5.2 step 5).
           tar --owner=0 --group=0 -czf "$out" \
             --exclude='node_modules' \
             --exclude='.git' \
@@ -61,7 +61,7 @@ jobs:
             --exclude='*.log' \
             --transform "s|^|picture-frame-${GITHUB_REF_NAME}/|" \
             core kiosk web builtin-screens migrations deploy \
-            package.json package-lock.json tsconfig.base.json \
+            package.json package-lock.json tsconfig.base.json .npmrc \
             SPEC.md README.md CHANGELOG.md LICENSE \
             config.example.yaml screens.example.yaml
           (cd "$stage" && sha256sum "frame-${GITHUB_REF_NAME}.tar.gz" \

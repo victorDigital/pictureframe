@@ -1,7 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { execFile, type ExecFileOptions } from "node:child_process";
 import * as tar from "tar";
 import { ConfigStore } from "../config/state.js";
 import { GitHubClient, ReleaseInfo } from "./githubClient.js";
@@ -22,7 +21,22 @@ import { logUpdaterEvent } from "./log.js";
 import { Quarantine } from "./quarantine.js";
 import { preflightCheck } from "./preflight.js";
 
-const exec = promisify(execFile);
+const commandMaxBuffer = 64 * 1024 * 1024;
+const exec = (file: string, args: string[] = [], options: ExecFileOptions = {}) =>
+  new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+    execFile(
+      file,
+      args,
+      { ...options, encoding: "utf8", maxBuffer: commandMaxBuffer },
+      (err, stdout, stderr) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve({ stdout: String(stdout), stderr: String(stderr) });
+      },
+    );
+  });
 const log = sub("updater");
 
 export type UpdaterStatus = {
@@ -230,11 +244,16 @@ export class Updater {
         NODE_ENV: "development",
         npm_config_production: "false",
       };
-      await exec("npm", ["ci", "--include=dev"], { cwd: staging, env: buildEnv });
+      await exec("npm", ["ci", "--include=dev", "--no-audit", "--no-fund", "--loglevel=warn"], {
+        cwd: staging,
+        env: buildEnv,
+      });
       this.setPhase("build", "Building staged release");
       await exec("npm", ["run", "build"], { cwd: staging, env: buildEnv });
       this.setPhase("prune", "Pruning dev dependencies");
-      await exec("npm", ["prune", "--omit=dev"], { cwd: staging });
+      await exec("npm", ["prune", "--omit=dev", "--no-audit", "--no-fund", "--loglevel=warn"], {
+        cwd: staging,
+      });
 
       this.setPhase("migrations", "Applying migrations");
       const migResult = await applyPending({
