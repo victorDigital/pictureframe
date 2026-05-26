@@ -5,6 +5,19 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-05-26
+
+### Fixed
+
+- Updater subprocesses now stream command output to log files under
+  `/opt/frame/state/update-commands/` instead of buffering it in memory,
+  eliminating `ERR_CHILD_PROCESS_STDIO_MAXBUFFER` even for very verbose
+  npm or apt output.
+- The Updates UI now shows an SSH recovery command when an in-app apply fails
+  with the buffer-overflow error on an older release.
+- `deploy/update.sh` now forces dev dependencies during staging, clears the
+  matching quarantine entry on success, and documents the UI follow-up.
+
 ## [0.0.5] - 2026-05-26
 
 ### Fixed

@@ -1,6 +1,5 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { execFile, type ExecFileOptions } from "node:child_process";
 import * as tar from "tar";
 import { ConfigStore } from "../config/state.js";
 import { GitHubClient, ReleaseInfo } from "./githubClient.js";
@@ -20,23 +19,8 @@ import { sub } from "../util/logger.js";
 import { logUpdaterEvent } from "./log.js";
 import { Quarantine } from "./quarantine.js";
 import { preflightCheck } from "./preflight.js";
+import { runCommand } from "./exec.js";
 
-const commandMaxBuffer = 64 * 1024 * 1024;
-const exec = (file: string, args: string[] = [], options: ExecFileOptions = {}) =>
-  new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-    execFile(
-      file,
-      args,
-      { ...options, encoding: "utf8", maxBuffer: commandMaxBuffer },
-      (err, stdout, stderr) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve({ stdout: String(stdout), stderr: String(stderr) });
-      },
-    );
-  });
 const log = sub("updater");
 
 export type UpdaterStatus = {
@@ -244,16 +228,23 @@ export class Updater {
         NODE_ENV: "development",
         npm_config_production: "false",
       };
-      await exec("npm", ["ci", "--include=dev", "--no-audit", "--no-fund", "--loglevel=warn"], {
+      await runCommand(
+        "npm",
+        ["ci", "--include=dev", "--no-audit", "--no-fund", "--loglevel=warn"],
+        { cwd: staging, env: buildEnv, logName: "npm-ci.log" },
+      );
+      this.setPhase("build", "Building staged release");
+      await runCommand("npm", ["run", "build"], {
         cwd: staging,
         env: buildEnv,
+        logName: "npm-build.log",
       });
-      this.setPhase("build", "Building staged release");
-      await exec("npm", ["run", "build"], { cwd: staging, env: buildEnv });
       this.setPhase("prune", "Pruning dev dependencies");
-      await exec("npm", ["prune", "--omit=dev", "--no-audit", "--no-fund", "--loglevel=warn"], {
-        cwd: staging,
-      });
+      await runCommand(
+        "npm",
+        ["prune", "--omit=dev", "--no-audit", "--no-fund", "--loglevel=warn"],
+        { cwd: staging, logName: "npm-prune.log" },
+      );
 
       this.setPhase("migrations", "Applying migrations");
       const migResult = await applyPending({
@@ -285,7 +276,9 @@ export class Updater {
       await fs.rename(paths.current + ".new", paths.current);
 
       this.setPhase("restart", "Restarting frame-core");
-      await exec("sudo", ["/usr/bin/systemctl", "restart", "frame-core"]);
+      await runCommand("sudo", ["/usr/bin/systemctl", "restart", "frame-core"], {
+        logName: "systemctl-restart.log",
+      });
       this.setPhase("health", "Waiting for frame-core health check");
       const healthy = await this.waitHealthy(this.store.current.config.updater.health_check_window_sec);
       if (!healthy) {
@@ -349,7 +342,7 @@ export class Updater {
         path.join(paths.runtimeDir, "os-packages.required"),
         `${missing.join("\n")}\n`,
       );
-      await exec("sudo", ["-n", helper]);
+      await runCommand("sudo", ["-n", helper], { logName: "install-os-packages.log" });
       this.setPhase("os-packages", `Installed OS packages: ${missing.join(", ")}`);
       return;
     } catch (err) {
@@ -370,7 +363,9 @@ export class Updater {
     const res = await fetch(sigUrl);
     if (!res.ok) throw new Error("signature_download_failed");
     await fs.writeFile(sigPath, Buffer.from(await res.arrayBuffer()));
-    await exec("gpgv", ["--keyring", keyFile, sigPath, tarball]);
+    await runCommand("gpgv", ["--keyring", keyFile, sigPath, tarball], {
+      logName: "gpgv-verify.log",
+    });
   }
 
   private async waitHealthy(windowSec: number): Promise<boolean> {
@@ -416,7 +411,9 @@ export class Updater {
       configDir: "/etc/frame",
       stateDir: paths.stateDir,
     });
-    await exec("sudo", ["/usr/bin/systemctl", "restart", "frame-core"]).catch(() => {});
+    await runCommand("sudo", ["/usr/bin/systemctl", "restart", "frame-core"], {
+      logName: "systemctl-restart.log",
+    }).catch(() => {});
   }
 
   async tailLog(lines: number, subsystem?: string, unit?: string) {
@@ -425,7 +422,7 @@ export class Updater {
     if (process.platform === "linux") {
       try {
         const args = ["-u", safeUnit, "-n", String(safeLines), "--no-pager", "--output=short-iso"];
-        const { stdout } = await exec("journalctl", args);
+        const { stdout } = await runCommand("journalctl", args, { logName: "journalctl.log" });
         let out = stdout.trimEnd().split("\n").filter((l) => l.length > 0);
         if (subsystem) {
           out = out.filter(
@@ -468,7 +465,9 @@ export class Updater {
 async function releaseOsPackages(staging: string): Promise<string[]> {
   const helper = path.join(staging, "deploy", "install-os-packages.sh");
   try {
-    const { stdout } = await exec("bash", [helper, "--print"]);
+    const { stdout } = await runCommand("bash", [helper, "--print"], {
+      logName: "os-packages-print.log",
+    });
     return stdout.split(/\s+/).filter(Boolean);
   } catch {
     return [];
@@ -479,7 +478,9 @@ async function missingPackages(packages: string[]): Promise<string[]> {
   const missing: string[] = [];
   for (const pkg of packages) {
     try {
-      await exec("dpkg-query", ["-W", "-f=${db:Status-Abbrev}", pkg]);
+      await runCommand("dpkg-query", ["-W", "-f=${db:Status-Abbrev}", pkg], {
+        logName: `dpkg-query-${pkg}.log`,
+      });
     } catch {
       missing.push(pkg);
     }

@@ -20,6 +20,8 @@ curl -fsSL "https://api.github.com/repos/$REPO/tarball/$TAG" \
   | tar -xz --strip-components=1 -C "$STAGING"
 
 cd "$STAGING"
+export NODE_ENV=development
+export npm_config_production=false
 if [[ -x "$STAGING/deploy/install-os-packages.sh" ]]; then
   sudo "$STAGING/deploy/install-os-packages.sh"
 fi
@@ -29,6 +31,15 @@ npm prune --omit=dev --no-audit --no-fund --loglevel=warn
 
 mv "$STAGING" "$RELEASE"
 ln -snf "$RELEASE" /opt/frame/current
+
+QUARANTINE="/opt/frame/state/quarantine.json"
+if [[ -f "$QUARANTINE" ]] && command -v jq >/dev/null; then
+  tmp="$(mktemp)"
+  jq --arg tag "$TAG" '.quarantined = (.quarantined // [] | map(select(.tag != $tag)))' "$QUARANTINE" >"$tmp" \
+    && mv "$tmp" "$QUARANTINE"
+fi
+
 sudo systemctl restart frame-core.service
 sudo systemctl restart frame-kiosk.service
 echo "Switched /opt/frame/current → $RELEASE"
+echo "If the UI still shows a quarantined $TAG, clear it from Updates → Quarantined releases."

@@ -1,26 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
-import { execFile, type ExecFileOptions } from "node:child_process";
 import YAML from "yaml";
 import { sub } from "../util/logger.js";
+import { runCommand } from "./exec.js";
 
-const commandMaxBuffer = 64 * 1024 * 1024;
-const exec = (file: string, args: string[] = [], options: ExecFileOptions = {}) =>
-  new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-    execFile(
-      file,
-      args,
-      { ...options, encoding: "utf8", maxBuffer: commandMaxBuffer },
-      (err, stdout, stderr) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve({ stdout: String(stdout), stderr: String(stderr) });
-      },
-    );
-  });
 const log = sub("updater.migrations");
 
 export type AppliedMigration = {
@@ -148,17 +132,19 @@ export async function applyPending(opts: {
     let output = "";
     try {
       if (mig.ext === ".sh") {
-        const { stdout, stderr } = await exec("bash", [mig.filePath]);
+        const { stdout, stderr } = await runCommand("bash", [mig.filePath], {
+          logName: `migration-${mig.number}-${mig.name}.log`,
+        });
         output = stdout + stderr;
       } else if (mig.ext === ".yaml") {
         const patch = YAML.parse(await fs.readFile(mig.filePath, "utf8")) as Record<string, unknown>;
         output = `applied yaml patch with keys: ${Object.keys(patch).join(", ")}`;
       } else {
-        const { stdout, stderr } = await exec("node", [
-          "--enable-source-maps",
-          "--experimental-strip-types",
-          mig.filePath,
-        ]);
+        const { stdout, stderr } = await runCommand(
+          "node",
+          ["--enable-source-maps", "--experimental-strip-types", mig.filePath],
+          { logName: `migration-${mig.number}-${mig.name}.log` },
+        );
         output = stdout + stderr;
       }
     } catch (err) {
