@@ -5,6 +5,14 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.10] - 2026-05-26
+
+### Fixed
+
+- Kiosk cursor handling now hides the cursor by default, briefly shows it only
+  while pointer movement is active, and re-hides it after idle in both shell
+  content and CDP-managed URL tabs.
+
 ## [0.0.9] - 2026-05-26
 
 ### Changed

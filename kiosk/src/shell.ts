@@ -39,6 +39,7 @@ let activeId: string | null = null;
 let ws: WebSocket | null = null;
 let reconnectTimer: number | null = null;
 let visible: string = "";
+let cursorTimer = 0;
 
 function setStatus(text: string | null) {
   if (text) {
@@ -56,6 +57,17 @@ function setTransitionMs(ms: number) {
 function setDisplayGeometry(scale: number, orientation: "normal" | "90" | "180" | "270") {
   document.documentElement.style.setProperty("--screen-scale", String(scale || 1));
   document.documentElement.dataset.orientation = orientation;
+}
+
+function hideCursor() {
+  window.clearTimeout(cursorTimer);
+  document.documentElement.classList.add("frame-cursor-idle");
+}
+
+function showCursorBriefly() {
+  document.documentElement.classList.remove("frame-cursor-idle");
+  window.clearTimeout(cursorTimer);
+  cursorTimer = window.setTimeout(hideCursor, 1200);
 }
 
 function builtinUrl(screen: ScreenInfo): string {
@@ -253,5 +265,13 @@ window.addEventListener("message", (ev) => {
 });
 
 setInterval(() => send({ type: "heartbeat", visible }), 5000);
+
+hideCursor();
+window.addEventListener("pointermove", showCursorBriefly, { passive: true });
+window.addEventListener("mousemove", showCursorBriefly, { passive: true });
+window.addEventListener("pointerdown", hideCursor, { passive: true });
+window.addEventListener("touchstart", hideCursor, { passive: true });
+window.addEventListener("blur", hideCursor);
+document.addEventListener("visibilitychange", hideCursor);
 
 connect();
