@@ -5,6 +5,14 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.7] - 2026-05-26
+
+### Fixed
+
+- VNC now starts wayvnc with `/run/frame` as its runtime directory while
+  preserving the real Wayland socket path, so wayvnc can create its control
+  socket even under the hardened `frame-core` systemd sandbox.
+
 ## [0.0.6] - 2026-05-26
 
 ### Fixed

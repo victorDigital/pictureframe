@@ -84,8 +84,10 @@ export class VncSupervisor {
     }
 
     await writeWayvncConfig(configFile, useAuth ? password : undefined);
+    await fs.rm(path.join(this.runtimeDir, "wayvncctl"), { force: true });
 
     const wlEnv = await wlSessionEnv();
+    const wayvncEnv = wayvncProcessEnv(wlEnv, this.runtimeDir);
     if (!wlEnv.WAYLAND_DISPLAY) {
       log.warn(
         { runtimeDir: wlEnv.XDG_RUNTIME_DIR },
@@ -104,7 +106,8 @@ export class VncSupervisor {
       ["--config", configFile, "--log-level=info", VNC_HOST, String(VNC_PORT)],
       {
         stdio: ["ignore", "pipe", "pipe"],
-        env: { ...process.env, ...wlEnv },
+        cwd: this.runtimeDir,
+        env: { ...process.env, ...wayvncEnv },
       },
     );
     this.wayvnc.stdout?.on("data", (chunk) => {
@@ -224,4 +227,15 @@ function supportsPlainAuth(version: string | undefined): boolean {
   const major = parts[0] ?? 0;
   const minor = parts[1] ?? 0;
   return major > 0 || (major === 0 && minor >= 7);
+}
+
+export function wayvncProcessEnv(
+  wlEnv: Record<string, string>,
+  runtimeDir: string,
+): Record<string, string> {
+  const env: Record<string, string> = { ...wlEnv, XDG_RUNTIME_DIR: runtimeDir };
+  if (wlEnv.XDG_RUNTIME_DIR && wlEnv.WAYLAND_DISPLAY && !path.isAbsolute(wlEnv.WAYLAND_DISPLAY)) {
+    env.WAYLAND_DISPLAY = path.join(wlEnv.XDG_RUNTIME_DIR, wlEnv.WAYLAND_DISPLAY);
+  }
+  return env;
 }
