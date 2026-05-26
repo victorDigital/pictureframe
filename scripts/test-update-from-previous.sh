@@ -58,11 +58,38 @@ else
   echo "sudo unavailable without a password; skipping visudo syntax check."
 fi
 
+readonly_home="$tmp/readonly-home"
+mkdir -p "$readonly_home"
+chmod 0555 "$readonly_home"
+cat >"$tmp/npm-env.mjs" <<'NODE'
+import { pathToFileURL } from "node:url";
+
+const updater = await import(pathToFileURL(`${process.env.REPO_ROOT}/core/src/updater/index.ts`).href);
+
+const env = await updater.npmUpdateEnv(process.env.FRAME_STATE_DIR, {
+  PATH: process.env.PATH,
+  HOME: process.env.READONLY_HOME,
+  NODE_ENV: "production",
+  npm_config_production: "true",
+});
+
+if (env.npm_config_production || env.NPM_CONFIG_PRODUCTION) {
+  throw new Error("updater npm environment must not preserve production config");
+}
+
+for (const key of ["HOME", "NODE_ENV", "npm_config_cache", "npm_config_update_notifier"]) {
+  console.log(`export ${key}=${JSON.stringify(env[key] ?? "")}`);
+}
+NODE
+REPO_ROOT="$PWD" FRAME_STATE_DIR="$tmp/state" READONLY_HOME="$readonly_home" node --import tsx "$tmp/npm-env.mjs" >"$tmp/npm-env.sh"
+
 (
   cd "$tmp/staging"
-  NODE_ENV=production npm ci --include=dev --no-audit --no-fund --loglevel=warn
-  NODE_ENV=production npm run build
-  NODE_ENV=production npm prune --omit=dev --no-audit --no-fund --loglevel=warn
+  # shellcheck disable=SC1090
+  source "$tmp/npm-env.sh"
+  npm ci --include=dev --no-audit --no-fund --loglevel=warn
+  npm run build
+  npm prune --omit=dev --no-audit --no-fund --loglevel=warn
 )
 
 echo "Update compatibility smoke passed: $previous_tag -> $current_tag"

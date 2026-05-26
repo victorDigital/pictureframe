@@ -5,6 +5,15 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.13] - 2026-05-27
+
+### Fixed
+
+- The previous-version update smoke test now runs staged npm commands with a
+  read-only fake home and the updater's writable npm cache environment.
+- The kiosk compositor now uses a 1px cursor and best-effort startup pointer
+  nudging to push the Wayland cursor toward the bottom-right corner.
+
 ## [0.0.12] - 2026-05-26
 
 ### Fixed

@@ -33,8 +33,11 @@ export async function npmUpdateEnv(
   const cache = path.join(stateDir, "npm-cache");
   await fs.mkdir(home, { recursive: true });
   await fs.mkdir(cache, { recursive: true });
+  const { npm_config_production, NPM_CONFIG_PRODUCTION, ...env } = baseEnv;
+  void npm_config_production;
+  void NPM_CONFIG_PRODUCTION;
   return {
-    ...baseEnv,
+    ...env,
     HOME: home,
     NODE_ENV: "development",
     npm_config_cache: cache,
