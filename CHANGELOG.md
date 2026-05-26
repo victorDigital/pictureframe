@@ -5,6 +5,17 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-05-26
+
+### Fixed
+
+- Release updates can now build on devices whose `frame-core` service runs with
+  `NODE_ENV=production`; the updater forces dev dependencies during the staging
+  build before pruning them again.
+- The Vite/TypeScript build tools required by the already-deployed updater are
+  available from production installs, so devices that failed on `v0.0.2` can
+  apply this release without manual SSH repair.
+
 ## [0.0.2] - 2026-05-26
 
 ### Added
