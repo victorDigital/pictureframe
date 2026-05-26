@@ -5,6 +5,14 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.8] - 2026-05-26
+
+### Fixed
+
+- The OS package helper now detects read-only bind mounts around apt/dpkg
+  paths and temporarily remounts them writable, allowing package installs from
+  the hardened `frame-core` systemd namespace.
+
 ## [0.0.7] - 2026-05-26
 
 ### Fixed

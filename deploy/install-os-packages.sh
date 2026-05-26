@@ -28,6 +28,30 @@ if [[ "$(id -u)" -ne 0 ]]; then
   exit 1
 fi
 
+REMOUNTED_TARGETS=()
+
+ensure_mount_writable() {
+  local path="$1"
+  local target options
+  target="$(findmnt -no TARGET -T "$path" 2>/dev/null || true)"
+  options="$(findmnt -no OPTIONS -T "$path" 2>/dev/null || true)"
+  [[ -n "$target" ]] || return 0
+  if [[ ",$options," == *,ro,* ]]; then
+    echo "Remounting $target read-write for package installation" >&2
+    mount -o remount,rw "$target"
+    REMOUNTED_TARGETS+=("$target")
+  fi
+}
+
+restore_remounted_targets() {
+  local target
+  for target in "${REMOUNTED_TARGETS[@]}"; do
+    mount -o remount,ro "$target" 2>/dev/null || true
+  done
+}
+
+trap restore_remounted_targets EXIT
+
 export DEBIAN_FRONTEND=noninteractive
 REQUEST_FILE="/run/frame/os-packages.required"
 if [[ -f "$REQUEST_FILE" ]]; then
@@ -47,6 +71,12 @@ for pkg in "${PACKAGES[@]}"; do
     exit 2
   fi
 done
+
+ensure_mount_writable /usr/bin
+ensure_mount_writable /etc/sudoers.d
+ensure_mount_writable /var/cache/apt/archives
+ensure_mount_writable /var/lib/apt/lists
+ensure_mount_writable /var/lib/dpkg
 
 apt-get update -qq
 apt-get install -y -qq "${PACKAGES[@]}"
