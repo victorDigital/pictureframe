@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -39,6 +41,9 @@ jobs:
 
       - name: Build
         run: npm run build --workspaces --if-present
+
+      - name: Test update from previous release
+        run: bash scripts/test-update-from-previous.sh
 
       # The updater downloads api.github.com/repos/<repo>/tarball/<tag> by
       # default — that's GitHub's auto-generated source tarball with no

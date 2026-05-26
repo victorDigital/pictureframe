@@ -20,8 +20,10 @@ import { logUpdaterEvent } from "./log.js";
 import { Quarantine } from "./quarantine.js";
 import { preflightCheck } from "./preflight.js";
 import { runCommand } from "./exec.js";
+import { releaseOsPackages } from "./osPackages.js";
 
 const log = sub("updater");
+const rootHelper = "/usr/local/lib/frame/root-helper";
 
 export type UpdaterStatus = {
   current: string;
@@ -276,9 +278,7 @@ export class Updater {
       await fs.rename(paths.current + ".new", paths.current);
 
       this.setPhase("restart", "Restarting frame-core");
-      await runCommand("sudo", ["/usr/bin/systemctl", "restart", "frame-core"], {
-        logName: "systemctl-restart.log",
-      });
+      await this.restartCore();
       this.setPhase("health", "Waiting for frame-core health check");
       const healthy = await this.waitHealthy(this.store.current.config.updater.health_check_window_sec);
       if (!healthy) {
@@ -335,18 +335,15 @@ export class Updater {
       return;
     }
     this.setPhase("os-packages", `Installing OS packages: ${missing.join(", ")}`);
-    const helper = path.join(paths.current, "deploy", "install-os-packages.sh");
+    const requestFile = path.join(paths.runtimeDir, "os-packages.required");
     try {
       await fs.mkdir(paths.runtimeDir, { recursive: true });
-      await fs.writeFile(
-        path.join(paths.runtimeDir, "os-packages.required"),
-        `${missing.join("\n")}\n`,
-      );
-      await runCommand("sudo", ["-n", helper], { logName: "install-os-packages.log" });
+      await fs.writeFile(requestFile, `${missing.join("\n")}\n`);
+      await this.installPackages(requestFile);
       this.setPhase("os-packages", `Installed OS packages: ${missing.join(", ")}`);
       return;
     } catch (err) {
-      const command = `sudo ${helper}`;
+      const command = `sudo ${rootHelper} install-packages ${requestFile}`;
       const msg = `OS packages missing (${missing.join(", ")}). Run '${command}' once on the device, then retry the update.`;
       this.status_.lastWarning = msg;
       this.setPhase("os-packages", msg, "warn");
@@ -411,9 +408,35 @@ export class Updater {
       configDir: "/etc/frame",
       stateDir: paths.stateDir,
     });
-    await runCommand("sudo", ["/usr/bin/systemctl", "restart", "frame-core"], {
-      logName: "systemctl-restart.log",
-    }).catch(() => {});
+    await this.restartCore().catch(() => {});
+  }
+
+  private async installPackages(requestFile: string) {
+    try {
+      await runCommand("sudo", ["-n", rootHelper, "install-packages", requestFile], {
+        logName: "install-os-packages.log",
+      });
+    } catch (helperErr) {
+      const legacy = path.join(paths.current, "deploy", "install-os-packages.sh");
+      await runCommand("sudo", ["-n", legacy], { logName: "install-os-packages-legacy.log" })
+        .catch(() => {
+          throw helperErr;
+        });
+    }
+  }
+
+  private async restartCore() {
+    try {
+      await runCommand("sudo", ["-n", rootHelper, "restart-core"], {
+        logName: "systemctl-restart.log",
+      });
+    } catch (helperErr) {
+      await runCommand("sudo", ["-n", "/usr/bin/systemctl", "restart", "frame-core"], {
+        logName: "systemctl-restart-legacy.log",
+      }).catch(() => {
+        throw helperErr;
+      });
+    }
   }
 
   async tailLog(lines: number, subsystem?: string, unit?: string) {
@@ -459,18 +482,6 @@ export class Updater {
       { at, phase, detail, level },
     ];
     void logUpdaterEvent({ level, msg: `phase:${phase}`, details: detail });
-  }
-}
-
-async function releaseOsPackages(staging: string): Promise<string[]> {
-  const helper = path.join(staging, "deploy", "install-os-packages.sh");
-  try {
-    const { stdout } = await runCommand("bash", [helper, "--print"], {
-      logName: "os-packages-print.log",
-    });
-    return stdout.split(/\s+/).filter(Boolean);
-  } catch {
-    return [];
   }
 }
 

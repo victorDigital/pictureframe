@@ -231,6 +231,12 @@ install -d -o root  -g frame -m 0750 /etc/frame/secrets
 # Runtime dir for CDP socket + pid files.
 install -d -o frame -g frame -m 0755 /run/frame
 
+if [[ -f "$(dirname "$0")/root-helper" ]]; then
+  log "Installing root helper"
+  install -d -o root -g root -m 0755 /usr/local/lib/frame
+  install -o root -g root -m 0755 "$(dirname "$0")/root-helper" /usr/local/lib/frame/root-helper
+fi
+
 ###############################################################################
 # 7. Detect backlight device and render udev rule
 ###############################################################################
@@ -271,10 +277,10 @@ fi
 cat > /etc/sudoers.d/frame <<'EOF'
 # Picture Frame sudoers
 # Brightness does NOT go through sudo (udev rule grants direct access).
-frame ALL=(root) NOPASSWD: /usr/bin/systemctl restart frame-core, \
-                            /usr/bin/systemctl restart frame-kiosk, \
-                            /usr/bin/systemctl reboot, \
-                            /opt/frame/current/deploy/install-os-packages.sh
+frame ALL=(root) NOPASSWD: /usr/local/lib/frame/root-helper install-packages /run/frame/os-packages.required, \
+                            /usr/local/lib/frame/root-helper restart-core, \
+                            /usr/local/lib/frame/root-helper restart-kiosk, \
+                            /usr/local/lib/frame/root-helper reboot
 EOF
 chmod 0440 /etc/sudoers.d/frame
 visudo -cf /etc/sudoers.d/frame >/dev/null

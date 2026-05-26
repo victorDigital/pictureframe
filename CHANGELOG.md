@@ -5,6 +5,22 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.9] - 2026-05-26
+
+### Changed
+
+- OS package installs now go through a root-owned helper at
+  `/usr/local/lib/frame/root-helper` instead of a release-controlled sudo
+  script.
+- Releases declare required OS packages in `deploy/os-packages.txt`, and the
+  updater installs missing allowlisted packages automatically.
+- Release pipeline documentation now lives in `docs/RELEASES.md`.
+
+### Removed
+
+- Removed the manual `deploy/update.sh` recovery script; the in-app updater is
+  the supported update path.
+
 ## [0.0.8] - 2026-05-26
 
 ### Fixed

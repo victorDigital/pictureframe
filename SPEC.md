@@ -238,13 +238,14 @@ apply gate (see §5.6)
  2. Snapshot config and state (see §5.3 for layout, §5.5 for secret handling)
  3. Download tag tarball from GitHub API to staging dir
  4. Verify signature if signing key configured (§5.7)
- 5. npm ci in staging
- 6. Verify migration integrity (§5.4)
- 7. Pre-flight health-check staging on port 8081
- 8. Run new migrations in order (idempotent, recorded)
- 9. Atomic symlink swap: /opt/frame/current
-10. systemctl restart frame-core
-11. Post-start health check on :8080 every 5s for 60s
+ 5. Install declared OS packages through the root helper (§5.4)
+ 6. npm ci in staging
+ 7. Verify migration integrity (§5.4)
+ 8. Pre-flight health-check staging on port 8081
+ 9. Run new migrations in order (idempotent, recorded)
+10. Atomic symlink swap: /opt/frame/current
+11. Restart frame-core through the root helper
+12. Post-start health check on :8080 every 5s for 60s
         │
         ▼
    success?  ── no ──> rollback (§5.5)
@@ -285,15 +286,18 @@ Three types: shell (`.sh`), config patch (`.yaml`), TypeScript (`.ts`). Numbered
 
 **Migration integrity check.** Before applying any update, the runner re-hashes the migration files in the new release at numbers ≤ the highest previously-applied number. If any hash differs from what's recorded, the update aborts with `migration_history_diverged`. This catches force-pushed tags, tampered tarballs, and renumbering mistakes. Aborts are surfaced in the UI; recovery requires manual SSH.
 
-**Sudoers scope.** Migrations run as the `frame` user. The sudoers file grants only:
+**Privileged helper scope.** Migrations and the updater run as the `frame` user. Root actions go through `/usr/local/lib/frame/root-helper`, a root-owned script installed by `deploy/install.sh`. The sudoers file grants only explicit helper subcommands:
 
 ```
-frame ALL=(root) NOPASSWD: /usr/bin/systemctl restart frame-core, \
-                            /usr/bin/systemctl restart frame-kiosk, \
-                            /usr/bin/systemctl reboot
+frame ALL=(root) NOPASSWD: /usr/local/lib/frame/root-helper install-packages /run/frame/os-packages.required, \
+                            /usr/local/lib/frame/root-helper restart-core, \
+                            /usr/local/lib/frame/root-helper restart-kiosk, \
+                            /usr/local/lib/frame/root-helper reboot
 ```
 
-OS package installs are **not** in the sudoers scope. Migrations that need OS packages mark themselves with a `requires_manual_step` flag in their frontmatter (for `.sh` files) or top-level key (for `.yaml`/`.ts`). The updater stops at such migrations, surfaces "this update needs a manual step" in the UI with the exact command to run, and resumes after the user confirms via the UI or SSH. Releases that contain such migrations are flagged in the release listing.
+Releases declare required Debian/Ubuntu packages in `deploy/os-packages.txt`. The updater reads that manifest from the staged release, checks what is missing, writes `/run/frame/os-packages.required`, and invokes `root-helper install-packages`. The helper validates every requested package against its fixed allowlist before running apt and can temporarily remount apt/dpkg bind mounts read-write when frame-core's systemd sandbox exposes them read-only.
+
+Migrations that require operator judgment rather than a package from the allowlist still mark themselves with `requires_manual_step: true`. The updater stops at such migrations and surfaces the manual step in the UI.
 
 Brightness control does not go through sudo (see §10).
 
@@ -303,7 +307,7 @@ Rollback restores both code and config:
 
 1. Symlink `current` flips back to the previous release
 2. Config files (`frame.yaml`, `screens.yaml`, `migrations.json`) restored from `/opt/frame/snapshots/<from>--<to>/`
-3. `systemctl restart frame-core`
+3. `root-helper restart-core`
 4. The failed release is quarantined; updater won't re-attempt it
 5. Last 3 successful releases retained; older pruned with their snapshots
 
@@ -686,7 +690,9 @@ picture-frame/
 ├── migrations/
 ├── deploy/
 │   ├── install.sh
-│   ├── update.sh
+│   ├── root-helper
+│   ├── os-packages.txt
+│   ├── install-os-packages.sh (compatibility bridge for old sudoers)
 │   ├── systemd/
 │   │   ├── frame-core.service
 │   │   ├── frame-kiosk.service

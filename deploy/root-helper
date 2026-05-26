@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REQUEST_FILE="/run/frame/os-packages.required"
+
+PACKAGE_ALLOWLIST=(
+  wlr-randr
+  wlopm
+  wayvnc
+  websockify
+  novnc
+  ddcutil
+  cage
+  chromium
+)
+
+REMOUNTED_TARGETS=()
+
+usage() {
+  echo "usage: root-helper {--version|install-packages /run/frame/os-packages.required|restart-core|restart-kiosk|reboot}" >&2
+}
+
+ensure_root() {
+  if [[ "$(id -u)" -ne 0 ]]; then
+    echo "root-helper must run as root" >&2
+    exit 1
+  fi
+}
+
+ensure_mount_writable() {
+  local path="$1"
+  local target options
+  target="$(findmnt -no TARGET -T "$path" 2>/dev/null || true)"
+  options="$(findmnt -no OPTIONS -T "$path" 2>/dev/null || true)"
+  [[ -n "$target" ]] || return 0
+  if [[ ",$options," == *,ro,* ]]; then
+    echo "Remounting $target read-write for package installation" >&2
+    mount -o remount,rw "$target"
+    REMOUNTED_TARGETS+=("$target")
+  fi
+}
+
+restore_remounted_targets() {
+  local target
+  for target in "${REMOUNTED_TARGETS[@]}"; do
+    mount -o remount,ro "$target" 2>/dev/null || true
+  done
+}
+
+read_requested_packages() {
+  local file="$1"
+  sed -E 's/#.*$//' "$file" | awk 'NF { print $1 }' | sort -u
+}
+
+package_allowed() {
+  local pkg="$1"
+  local candidate
+  for candidate in "${PACKAGE_ALLOWLIST[@]}"; do
+    [[ "$pkg" == "$candidate" ]] && return 0
+  done
+  return 1
+}
+
+install_packages() {
+  local request_file="${1:-}"
+  if [[ "$request_file" != "$REQUEST_FILE" ]]; then
+    echo "Refusing package request outside $REQUEST_FILE" >&2
+    exit 2
+  fi
+  if [[ ! -f "$request_file" ]]; then
+    echo "Package request file missing: $request_file" >&2
+    exit 2
+  fi
+
+  mapfile -t packages < <(read_requested_packages "$request_file")
+  if [[ "${#packages[@]}" -eq 0 ]]; then
+    echo "No packages requested"
+    return 0
+  fi
+
+  local pkg
+  for pkg in "${packages[@]}"; do
+    if [[ ! "$pkg" =~ ^[a-z0-9.+-]+$ ]]; then
+      echo "Invalid package name: $pkg" >&2
+      exit 2
+    fi
+    if ! package_allowed "$pkg"; then
+      echo "Refusing package outside allowlist: $pkg" >&2
+      exit 2
+    fi
+  done
+
+  trap restore_remounted_targets EXIT
+  ensure_mount_writable /usr/bin
+  ensure_mount_writable /etc/sudoers.d
+  ensure_mount_writable /var/cache/apt/archives
+  ensure_mount_writable /var/lib/apt/lists
+  ensure_mount_writable /var/lib/dpkg
+
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -qq
+  apt-get install -y -qq "${packages[@]}"
+}
+
+case "${1:-}" in
+  --version)
+    echo "frame-root-helper 1"
+    ;;
+  install-packages)
+    ensure_root
+    install_packages "${2:-}"
+    ;;
+  restart-core)
+    ensure_root
+    /usr/bin/systemctl restart frame-core.service
+    ;;
+  restart-kiosk)
+    ensure_root
+    /usr/bin/systemctl restart frame-kiosk.service
+    ;;
+  reboot)
+    ensure_root
+    /usr/bin/systemctl reboot
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac

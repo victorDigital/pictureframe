@@ -30,6 +30,8 @@ The installer:
   wildcards (see SPEC §10)
 - Drops `frame-core.service`, `frame-kiosk.service`, and a daily Chromium
   restart timer
+- Installs a root-owned helper with a narrow sudoers allowlist for package
+  installs, service restarts, and reboot
 - Sets up `frame` autologin on tty1, then cage launches Chromium against
   `http://localhost:8080/shell/`
 - Prompts for a bearer token, VNC password, and MQTT password (or auto-
@@ -128,12 +130,8 @@ rollback semantics. The migration runner refuses to apply an update whose
 recorded migration hashes diverge from what the device already applied
 (SPEC §5.4).
 
-Manual release path, if you'd rather:
-
-```sh
-ssh frame@frame.local
-sudo /opt/frame/current/deploy/update.sh v1.2.3
-```
+Release authoring and the GitHub Actions pipeline are documented in
+[docs/RELEASES.md](./docs/RELEASES.md).
 
 ---
 

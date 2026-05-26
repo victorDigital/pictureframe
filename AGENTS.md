@@ -50,9 +50,10 @@ These were paid for in bugs and shouldn't be undone:
 - **Migration integrity.** Before applying an update, the runner re-hashes
   migration files at numbers ≤ the highest previously-applied number and
   aborts with `migration_history_diverged` on mismatch. Don't loosen this.
-- **Sudoers is narrow.** `frame` user can only restart its two services
-  and `systemctl reboot`. Brightness goes through a udev rule, not sudo
-  (§10 — the old sudoers-wildcard design was a sandbox escape).
+- **Sudoers is narrow.** `frame` user can only call the root-owned
+ updater helper for explicit subcommands (package allowlist install,
+ service restart, reboot). Brightness goes through a udev rule, not sudo
+ (§10 — the old sudoers-wildcard design was a sandbox escape).
 - **manual_next semantics.** A `manual_next` claim is popped on the
   arrival of *any* non-manual-next claim, regardless of resolved
   priority. See `scheduler/index.ts` and `tests/scheduler.test.ts`.

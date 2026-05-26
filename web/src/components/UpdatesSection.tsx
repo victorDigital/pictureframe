@@ -141,9 +141,6 @@ export function UpdatesSection() {
 
   const appliedAfter = status.available ? new Date(status.available.appliedAfter) : null;
   const stagingActive = appliedAfter && appliedAfter > new Date();
-  const bufferOverflow =
-    status.lastError?.includes("ERR_CHILD_PROCESS_STDIO_MAXBUFFER") ?? false;
-  const recoveryTag = status.available?.tag ?? quarantined[0]?.tag;
 
   return (
     <>
@@ -242,15 +239,6 @@ export function UpdatesSection() {
               Last result: <span className="text-foreground">{status.lastResult}</span>
               {status.lastError && ` — ${status.lastError}`}
             </p>
-          )}
-          {bufferOverflow && recoveryTag && (
-            <ErrorAlert
-              message={
-                `In-app update failed because this release's updater buffers command output in memory. ` +
-                `SSH to the device and run: sudo -u frame /opt/frame/current/deploy/update.sh ${recoveryTag} ` +
-                `(then clear the quarantined tag below if it still appears).`
-              }
-            />
           )}
           {status.lastWarning && (
             <ErrorAlert message={status.lastWarning} />

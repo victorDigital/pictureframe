@@ -8,6 +8,7 @@ import { wlSessionEnv } from "./wayland.js";
 
 const exec = promisify(execFile);
 const log = sub("brightness");
+const rootHelper = "/usr/local/lib/frame/root-helper";
 
 export class Brightness {
   constructor(private cfg: FrameConfig) {}
@@ -76,9 +77,11 @@ export class Brightness {
     log.warn("reboot requested via API");
     setTimeout(
       () =>
-        exec("sudo", ["-n", "/usr/bin/systemctl", "reboot"]).catch((err) => {
-          log.error({ err: String(err) }, "reboot command failed");
-        }),
+        exec("sudo", ["-n", rootHelper, "reboot"]).catch(() =>
+          exec("sudo", ["-n", "/usr/bin/systemctl", "reboot"]).catch((err) => {
+            log.error({ err: String(err) }, "reboot command failed");
+          }),
+        ),
       500,
     );
     return { ok: true };
@@ -96,7 +99,7 @@ export class Brightness {
     }
     if (!(await commandExists("wlr-randr"))) {
       throw new Error(
-        "display_power_missing_package: install wlr-randr or wlopm; run sudo /opt/frame/current/deploy/install-os-packages.sh on the device",
+        "display_power_missing_package: wlr-randr or wlopm is missing; apply the latest update so the updater installs declared OS packages",
       );
     }
     const { stdout } = await exec("wlr-randr", [], { env });
