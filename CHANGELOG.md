@@ -5,6 +5,39 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-05-26
+
+### Added
+
+- Display scale and orientation settings in `frame.yaml` and the Settings UI,
+  applied through `wlr-randr` on the kiosk Wayland session.
+
+### Changed
+
+- VNC now connects through the authenticated app server at `/vnc/ws`; the
+  websockify listener is loopback-only instead of exposed directly on the LAN.
+- MQTT connects with an explicit MQTT 3.1.1 client id and uses QoS 0 for HA
+  availability/state publishes to avoid broker PUBACK compatibility failures.
+- The installer writes the detected backlight device into `frame.yaml` and
+  installs `wlr-randr`; `wlopm` is installed when available.
+
+### Fixed
+
+- Brightness read/write falls back to the detected `/sys/class/backlight/*`
+  device when an existing config still points at `intel_backlight` on other
+  hardware.
+- Display on/off now runs `wlopm`/`wlr-randr` with the kiosk Wayland
+  environment, so calls from the system `frame-core` service reach Cage.
+- Kiosk cursor hiding is applied to all shell elements, and Chromium launches
+  with hidden scrollbars.
+- The bundled noVNC page no longer fails with "Connection lost" because it no
+  longer tries to connect to an unproxied `:6080` WebSocket from the browser.
+
+### Tests
+
+- 61 core tests pass, including coverage for writing display scale and
+  orientation settings.
+
 ### Added
 
 - `deploy/install.sh` provisions Debian 12 / Ubuntu 24.04: creates the

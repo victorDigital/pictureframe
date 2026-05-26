@@ -27,7 +27,7 @@ async function makeDeps() {
   await fs.writeFile(screensFile, "screens: []");
   const config: FrameConfig = {
     device: { name: "test-frame", bearer_token_file: tokenFile },
-    display: { brightness_backend: "none", default_brightness: 60 },
+    display: { brightness_backend: "none", default_brightness: 60, scale: 1, orientation: "normal" },
     screens_file: screensFile,
     default_screen: "clock",
     manual_pinned_timeout_hours: 4,

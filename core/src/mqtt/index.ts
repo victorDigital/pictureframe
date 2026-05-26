@@ -55,9 +55,10 @@ export class HaBridge {
     const password = (await fs.readFile(conf.password_file, "utf8").catch(() => "")).trim();
     this.state = "connecting";
 
-    const client = mqtt.connect({
-      host: conf.host,
-      port: conf.port,
+    const client = mqtt.connect(`mqtt://${conf.host}:${conf.port}`, {
+      clientId: `${this.nodeId}_${process.pid}`,
+      protocolVersion: 4,
+      clean: true,
       username: conf.username,
       password,
       keepalive: conf.keepalive,
@@ -66,7 +67,7 @@ export class HaBridge {
         topic: this.stateTopic("availability"),
         payload: "offline",
         retain: true,
-        qos: 1,
+        qos: 0,
       },
     });
     this.client = client;
@@ -76,8 +77,10 @@ export class HaBridge {
       this.authFailures = 0;
       log.info("MQTT connected");
       void this.publishDiscovery();
-      client.publish(this.stateTopic("availability"), "online", { retain: true, qos: 1 });
-      client.subscribe(`frame/cmd/+`);
+      client.publish(this.stateTopic("availability"), "online", { retain: true, qos: 0 });
+      client.subscribe(`frame/cmd/+`, { qos: 0 }, (err) => {
+        if (err) log.warn({ err }, "MQTT command subscribe failed");
+      });
       this.publishState();
     });
 
@@ -100,6 +103,13 @@ export class HaBridge {
           client.end(true);
         }
       } else {
+        if (msg.includes("Invalid header flag bits")) {
+          log.warn(
+            { err: msg, host: conf.host, port: conf.port },
+            "MQTT protocol error; check that host/port points to the broker listener, usually 1883, not the Home Assistant web UI",
+          );
+          return;
+        }
         log.warn({ err: msg }, "MQTT error");
       }
     });

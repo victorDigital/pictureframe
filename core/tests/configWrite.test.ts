@@ -53,6 +53,21 @@ test("applyConfigPatch creates missing sections (vnc) and toggles builtins", asy
   await fs.rm(dir, { recursive: true, force: true });
 });
 
+test("applyConfigPatch updates display geometry settings", async () => {
+  const { dir, file } = await fixture({
+    display: { brightness_backend: "backlight", default_brightness: 60 },
+  });
+  await applyConfigPatch(file, {
+    display: { scale: 1.25, orientation: "90" },
+  });
+  const round = YAML.parse(await fs.readFile(file, "utf8")) as {
+    display: { scale: number; orientation: string };
+  };
+  assert.equal(round.display.scale, 1.25);
+  assert.equal(round.display.orientation, "90");
+  await fs.rm(dir, { recursive: true, force: true });
+});
+
 test("applyConfigPatch is atomic (writes via .tmp + rename)", async () => {
   const { dir, file } = await fixture({ device: { name: "f1" } });
   await applyConfigPatch(file, { device: { name: "f2" } });

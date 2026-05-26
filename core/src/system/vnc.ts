@@ -2,9 +2,9 @@ import { spawn, ChildProcess, execFile } from "node:child_process";
 import { promises as fs, createWriteStream, WriteStream } from "node:fs";
 import { promisify } from "node:util";
 import path from "node:path";
-import os from "node:os";
 import { sub } from "../util/logger.js";
 import { paths } from "../util/paths.js";
+import { wlSessionEnv } from "./wayland.js";
 
 const exec = promisify(execFile);
 
@@ -12,7 +12,7 @@ const log = sub("vnc");
 
 const VNC_HOST = "127.0.0.1";
 const VNC_PORT = 5900;
-const WS_HOST = "0.0.0.0";
+const WS_HOST = "127.0.0.1";
 const WS_PORT = 6080;
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
 
@@ -202,61 +202,4 @@ function supportsPlainAuth(version: string | undefined): boolean {
   const major = parts[0] ?? 0;
   const minor = parts[1] ?? 0;
   return major > 0 || (major === 0 && minor >= 7);
-}
-
-async function wlSessionEnv(): Promise<Record<string, string>> {
-  const env: Record<string, string> = {};
-  const runtimeDir = await findFrameRuntimeDir();
-  if (runtimeDir) {
-    env.XDG_RUNTIME_DIR = runtimeDir;
-    const socket = await findWaylandSocket(runtimeDir);
-    if (socket) env.WAYLAND_DISPLAY = socket;
-  }
-  return env;
-}
-
-async function findFrameRuntimeDir(): Promise<string | undefined> {
-  if (process.env.XDG_RUNTIME_DIR) {
-    try {
-      const st = await fs.stat(process.env.XDG_RUNTIME_DIR);
-      if (st.isDirectory()) return process.env.XDG_RUNTIME_DIR;
-    } catch {
-      // fall through
-    }
-  }
-  try {
-    const userInfo = os.userInfo();
-    if (userInfo.uid >= 0) {
-      const dir = `/run/user/${userInfo.uid}`;
-      const st = await fs.stat(dir);
-      if (st.isDirectory()) return dir;
-    }
-  } catch {
-    // fall through
-  }
-  try {
-    const { stdout } = await exec("id", ["-u", "frame"]);
-    const uid = stdout.trim();
-    if (uid) {
-      const dir = `/run/user/${uid}`;
-      const st = await fs.stat(dir);
-      if (st.isDirectory()) return dir;
-    }
-  } catch {
-    // not on a real frame box, or `frame` user missing
-  }
-  return undefined;
-}
-
-async function findWaylandSocket(runtimeDir: string): Promise<string | undefined> {
-  try {
-    const entries = await fs.readdir(runtimeDir);
-    const candidates = entries.filter(
-      (n) => /^wayland-\d+$/.test(n) && !n.endsWith(".lock"),
-    );
-    candidates.sort();
-    return candidates[0];
-  } catch {
-    return undefined;
-  }
 }

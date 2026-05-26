@@ -11,6 +11,10 @@ body {
   cursor: none;
 }
 
+* {
+  cursor: none !important;
+}
+
 #builtins,
 #overlay {
   position: fixed;

@@ -5,7 +5,7 @@ import { FrameConfigSchema, ScreensFileSchema } from "../src/config/schema.js";
 test("frame config validates the example", () => {
   const ok = FrameConfigSchema.safeParse({
     device: { name: "lab", bearer_token_file: "/etc/frame/secrets/bearer_token" },
-    display: { brightness_backend: "backlight", default_brightness: 60 },
+    display: { brightness_backend: "backlight", default_brightness: 60, scale: 1, orientation: "normal" },
     screens_file: "/etc/frame/screens.yaml",
     default_screen: "clock",
     manual_pinned_timeout_hours: 4,
@@ -32,7 +32,7 @@ test("screens require at least one entry", () => {
 test("repo must be owner/repo", () => {
   const bad = FrameConfigSchema.safeParse({
     device: { name: "lab", bearer_token_file: "/x" },
-    display: { brightness_backend: "backlight", default_brightness: 60 },
+    display: { brightness_backend: "backlight", default_brightness: 60, scale: 1, orientation: "normal" },
     screens_file: "/x",
     default_screen: "clock",
     manual_pinned_timeout_hours: 4,

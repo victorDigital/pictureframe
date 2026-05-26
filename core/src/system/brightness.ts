@@ -4,6 +4,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { FrameConfig } from "../config/schema.js";
 import { sub } from "../util/logger.js";
+import { wlSessionEnv } from "./wayland.js";
 
 const exec = promisify(execFile);
 const log = sub("brightness");
@@ -18,7 +19,7 @@ export class Brightness {
   async read(): Promise<number> {
     const backend = this.cfg.display.brightness_backend;
     if (backend === "backlight") {
-      const dev = this.cfg.display.backlight_device;
+      const dev = await this.backlightDevice();
       if (!dev) return this.cfg.display.default_brightness;
       try {
         const [raw, maxRaw] = await Promise.all([
@@ -51,7 +52,7 @@ export class Brightness {
     const clamped = Math.max(0, Math.min(100, Math.round(percent)));
     const backend = this.cfg.display.brightness_backend;
     if (backend === "backlight") {
-      const dev = this.cfg.display.backlight_device;
+      const dev = await this.backlightDevice();
       if (!dev) return;
       try {
         const maxRaw = await fs.readFile(path.join(dev, "max_brightness"), "utf8");
@@ -84,11 +85,80 @@ export class Brightness {
   }
 
   async displayPower(state: "on" | "off"): Promise<{ ok: true }> {
-    if (state === "off") {
-      await exec("sh", ["-c", "wlopm --off '*'"]).catch(() => {});
-    } else {
-      await exec("sh", ["-c", "wlopm --on '*'"]).catch(() => {});
+    const env = { ...process.env, ...(await wlSessionEnv()) };
+    try {
+      await exec("wlopm", [state === "off" ? "--off" : "--on", "*"], { env });
+      return { ok: true };
+    } catch (err) {
+      log.warn({ err: String(err) }, "wlopm failed; trying wlr-randr");
     }
+    const { stdout } = await exec("wlr-randr", [], { env });
+    const outputs = parseWlrOutputs(stdout);
+    await Promise.all(
+      outputs.map((output) =>
+        exec("wlr-randr", ["--output", output, state === "off" ? "--off" : "--on"], {
+          env,
+        }),
+      ),
+    );
     return { ok: true };
   }
+
+  async applyDisplayConfig(): Promise<void> {
+    const scale = this.cfg.display.scale ?? 1;
+    const orientation = this.cfg.display.orientation ?? "normal";
+    if (scale === 1 && orientation === "normal") return;
+    const env = { ...process.env, ...(await wlSessionEnv()) };
+    const { stdout } = await exec("wlr-randr", [], { env });
+    const outputs = parseWlrOutputs(stdout);
+    await Promise.all(
+      outputs.map((output) =>
+        exec(
+          "wlr-randr",
+          ["--output", output, "--scale", String(scale), "--transform", orientation],
+          { env },
+        ),
+      ),
+    );
+    log.info({ scale, orientation, outputs }, "display geometry applied");
+  }
+
+  private async backlightDevice(): Promise<string | undefined> {
+    const configured = this.cfg.display.backlight_device;
+    if (configured && (await exists(configured))) return configured;
+    const detected = await detectBacklightDevice();
+    if (detected && detected !== configured) {
+      log.warn({ configured, detected }, "using detected backlight device");
+    }
+    return detected ?? configured;
+  }
+}
+
+async function exists(file: string): Promise<boolean> {
+  try {
+    await fs.stat(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function detectBacklightDevice(): Promise<string | undefined> {
+  try {
+    const base = "/sys/class/backlight";
+    const entries = await fs.readdir(base);
+    const preferred = ["intel_backlight", "amdgpu_bl0", "amdgpu_bl1", "acpi_video0"];
+    const picked = preferred.find((name) => entries.includes(name)) ?? entries.sort()[0];
+    return picked ? path.join(base, picked) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function parseWlrOutputs(stdout: string): string[] {
+  return stdout
+    .split("\n")
+    .filter((line) => line.length > 0 && !line.startsWith(" "))
+    .map((line) => line.trim().split(/\s+/, 1)[0])
+    .filter((name): name is string => Boolean(name));
 }

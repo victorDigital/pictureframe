@@ -40,10 +40,14 @@
 
       const params = new URLSearchParams(location.search);
       const host = params.get("host") ?? location.hostname;
-      const port = params.get("port") ?? "6080";
-      const path = params.get("path") ?? "";
+      const port = params.get("port") ?? location.port;
+      const path = (params.get("path") ?? "").replace(/^\/+/, "");
+      const token = params.get("token");
       const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
-      const url = `${wsProto}//${host}:${port}/${path}`;
+      const pathPart = path ? `/${path}` : "";
+      const portPart = port ? `:${port}` : "";
+      const tokenPart = token ? `?token=${encodeURIComponent(token)}` : "";
+      const url = `${wsProto}//${host}${portPart}${pathPart}${tokenPart}`;
 
       const screenEl = document.getElementById("screen");
       const statusEl = document.getElementById("status-text");

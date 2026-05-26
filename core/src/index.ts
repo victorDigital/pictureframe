@@ -113,6 +113,9 @@ async function main() {
     scheduler.setPinnedTimeoutHours(cfg.manual_pinned_timeout_hours);
     screens.setMaxPreloaded(cfg.scheduler.max_preloaded_url_screens);
     brightness.updateConfig(cfg);
+    brightness.applyDisplayConfig().catch((err) =>
+      log.warn({ err }, "could not apply display geometry"),
+    );
     vnc.updatePasswordFile(cfg.vnc?.password_file);
 
     if (cfg.vnc?.enabled === false) {
@@ -160,6 +163,9 @@ async function main() {
 
   brightness.write(store.current.config.display.default_brightness).catch((err) =>
     log.warn({ err }, "could not apply default brightness"),
+  );
+  brightness.applyDisplayConfig().catch((err) =>
+    log.warn({ err }, "could not apply display geometry"),
   );
 
   // Always start the scheduler so the clock comes up immediately; CDP

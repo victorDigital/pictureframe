@@ -26,6 +26,7 @@ exec "$CHROMIUM_BIN" \
   --ozone-platform=wayland \
   --enable-features=UseOzonePlatform \
   --disable-pinch \
+  --hide-scrollbars \
   --overscroll-history-navigation=0 \
   --user-data-dir="$USER_DATA_DIR" \
   --remote-debugging-port="$CDP_PORT" \

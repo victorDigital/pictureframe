@@ -6,6 +6,8 @@ display:
   brightness_backend: backlight       # or "ddcutil"
   backlight_device: /sys/class/backlight/intel_backlight
   default_brightness: 60
+  scale: 1
+  orientation: normal                 # normal, 90, 180, or 270
 
 screens_file: /etc/frame/screens.yaml
 default_screen: clock

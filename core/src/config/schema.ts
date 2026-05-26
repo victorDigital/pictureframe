@@ -39,6 +39,8 @@ export const FrameConfigSchema = z
       brightness_backend: z.enum(["backlight", "ddcutil", "none"]).default("backlight"),
       backlight_device: z.string().optional(),
       default_brightness: z.number().int().min(0).max(100).default(60),
+      scale: z.number().min(0.5).max(4).default(1),
+      orientation: z.enum(["normal", "90", "180", "270"]).default("normal"),
     }),
     screens_file: z.string().min(1),
     default_screen: z.string().min(1),
@@ -98,6 +100,8 @@ export const FrameConfigPatchSchema = z
         brightness_backend: z.enum(["backlight", "ddcutil", "none"]).optional(),
         backlight_device: z.string().optional(),
         default_brightness: z.number().int().min(0).max(100).optional(),
+        scale: z.number().min(0.5).max(4).optional(),
+        orientation: z.enum(["normal", "90", "180", "270"]).optional(),
       })
       .strict()
       .optional(),

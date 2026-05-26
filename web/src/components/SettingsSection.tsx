@@ -56,6 +56,8 @@ type FrameConfigView = {
     brightness_backend: "backlight" | "ddcutil" | "none";
     backlight_device: string | null;
     default_brightness: number;
+    scale: number;
+    orientation: "normal" | "90" | "180" | "270";
   };
   screens_file: string;
   default_screen: string;
@@ -92,6 +94,8 @@ type ConfigPatch = {
     brightness_backend?: "backlight" | "ddcutil" | "none";
     backlight_device?: string;
     default_brightness?: number;
+    scale?: number;
+    orientation?: "normal" | "90" | "180" | "270";
   };
   default_screen?: string;
   manual_pinned_timeout_hours?: number;
@@ -383,15 +387,21 @@ function DisplayTile({ cfg, save, busy }: TileProps) {
   const [backend, setBackend] = useState(cfg.display.brightness_backend);
   const [device, setDevice] = useState(cfg.display.backlight_device ?? "");
   const [defaultB, setDefaultB] = useState(cfg.display.default_brightness);
+  const [scale, setScale] = useState(cfg.display.scale);
+  const [orientation, setOrientation] = useState(cfg.display.orientation);
 
   useEffect(() => setBackend(cfg.display.brightness_backend), [cfg.display.brightness_backend]);
   useEffect(() => setDevice(cfg.display.backlight_device ?? ""), [cfg.display.backlight_device]);
   useEffect(() => setDefaultB(cfg.display.default_brightness), [cfg.display.default_brightness]);
+  useEffect(() => setScale(cfg.display.scale), [cfg.display.scale]);
+  useEffect(() => setOrientation(cfg.display.orientation), [cfg.display.orientation]);
 
   const dirty =
     backend !== cfg.display.brightness_backend ||
     device !== (cfg.display.backlight_device ?? "") ||
-    defaultB !== cfg.display.default_brightness;
+    defaultB !== cfg.display.default_brightness ||
+    scale !== cfg.display.scale ||
+    orientation !== cfg.display.orientation;
 
   return (
     <SettingsCard icon={Sun01Icon} title="Display">
@@ -430,6 +440,34 @@ function DisplayTile({ cfg, save, busy }: TileProps) {
           onValueChange={(v) => setDefaultB(v[0] ?? defaultB)}
         />
       </Field>
+      <Field label="Screen scale">
+        <Input
+          type="number"
+          min={0.5}
+          max={4}
+          step={0.05}
+          value={scale}
+          onChange={(e) => setScale(Number(e.target.value))}
+        />
+      </Field>
+      <Field label="Screen orientation">
+        <Select
+          value={orientation}
+          onValueChange={(v) =>
+            setOrientation(v as FrameConfigView["display"]["orientation"])
+          }
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="normal">normal</SelectItem>
+            <SelectItem value="90">90 degrees</SelectItem>
+            <SelectItem value="180">180 degrees</SelectItem>
+            <SelectItem value="270">270 degrees</SelectItem>
+          </SelectContent>
+        </Select>
+      </Field>
       <div className="flex items-center gap-2 pt-1">
         <Button
           disabled={busy || !dirty}
@@ -440,6 +478,8 @@ function DisplayTile({ cfg, save, busy }: TileProps) {
                   brightness_backend: backend,
                   backlight_device: device || undefined,
                   default_brightness: defaultB,
+                  scale,
+                  orientation,
                 },
               },
               "Display settings saved.",

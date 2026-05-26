@@ -18,7 +18,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { api } from "../api.js";
+import { api, getToken } from "../api.js";
 import { ErrorAlert } from "./common/ErrorAlert.js";
 import { PageHeader } from "./common/PageHeader.js";
 
@@ -78,8 +78,13 @@ export function VncSection() {
   }
 
   const vncUrl =
-    status?.running && status.wsPort
-      ? `/vnc.html?host=${location.hostname}&port=${status.wsPort}`
+    status?.running && status.wsUrl
+      ? `/vnc.html?${new URLSearchParams({
+          host: location.hostname,
+          port: location.port || (location.protocol === "https:" ? "443" : "80"),
+          path: status.wsUrl.replace(/^\//, ""),
+          ...(getToken() ? { token: getToken()! } : {}),
+        })}`
       : null;
 
   return (
@@ -146,9 +151,9 @@ export function VncSection() {
           ) : (
             <>
               <CardDescription>
-                Starts wayvnc and websockify on demand. The bundled noVNC client connects to{" "}
+                Starts wayvnc and websockify on demand. The bundled noVNC client connects through{" "}
                 <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
-                  ws://{location.hostname}:{status.wsPort}
+                  {location.host}/vnc/ws
                 </code>
                 ; nothing runs while idle.
               </CardDescription>

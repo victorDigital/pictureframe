@@ -31,7 +31,7 @@ export function buildSafeMode(reason: string, details?: unknown): SafeMode {
 
   const config: FrameConfig = {
     device: { name: "frame-safe-mode", bearer_token_file: "" },
-    display: { brightness_backend: "none", default_brightness: 60 },
+    display: { brightness_backend: "none", default_brightness: 60, scale: 1, orientation: "normal" },
     screens_file: "",
     default_screen: "emergency",
     manual_pinned_timeout_hours: 4,

@@ -1,6 +1,7 @@
 import Fastify, { FastifyInstance, FastifyRequest } from "fastify";
 import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
+import WebSocket from "ws";
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -60,7 +61,7 @@ const UNAUTH_PATHS = new Set([
   "/api/now_playing",
   "/family-message",
 ]);
-const WS_PATHS = new Set(["/ws", "/api/events", "/api/terminal"]);
+const WS_PATHS = new Set(["/ws", "/api/events", "/api/terminal", "/vnc/ws"]);
 
 export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
   const app = Fastify({ logger: false, trustProxy: true });
@@ -94,7 +95,7 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
     const url = req.url.split("?")[0]!;
     if (UNAUTH_PATHS.has(url)) return;
     if (url.startsWith("/shell/") || url.startsWith("/builtin/")) return;
-    if (!url.startsWith("/api") && !url.startsWith("/ws")) return;
+    if (!url.startsWith("/api") && !url.startsWith("/ws") && !WS_PATHS.has(url)) return;
 
     const expected = deps.configStore.current.bearerToken;
 
@@ -369,6 +370,43 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
     deps.vnc.stop();
     return { ok: true };
   });
+  app.get("/vnc/ws", { websocket: true }, (socket) => {
+    deps.vnc.markActive();
+    const upstream = new WebSocket("ws://127.0.0.1:6080/");
+    const pending: Array<{ data: WebSocket.RawData; isBinary: boolean }> = [];
+    const closeBoth = () => {
+      if (upstream.readyState === WebSocket.OPEN || upstream.readyState === WebSocket.CONNECTING) {
+        upstream.close();
+      }
+      if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+        socket.close();
+      }
+    };
+    upstream.on("open", () => {
+      deps.vnc.markActive();
+      for (const msg of pending.splice(0)) {
+        upstream.send(msg.data, { binary: msg.isBinary });
+      }
+    });
+    upstream.on("message", (data, isBinary) => {
+      if (socket.readyState === WebSocket.OPEN) socket.send(data, { binary: isBinary });
+    });
+    upstream.on("error", (err) => {
+      log.warn({ err }, "vnc upstream websocket error");
+      closeBoth();
+    });
+    upstream.on("close", closeBoth);
+    socket.on("message", (data, isBinary) => {
+      deps.vnc.markActive();
+      if (upstream.readyState === WebSocket.OPEN) {
+        upstream.send(data, { binary: isBinary });
+      } else {
+        pending.push({ data, isBinary });
+      }
+    });
+    socket.on("close", closeBoth);
+    socket.on("error", closeBoth);
+  });
 
   // ---- settings -------------------------------------------------------------
 
@@ -386,6 +424,8 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
         brightness_backend: cfg.display.brightness_backend,
         backlight_device: cfg.display.backlight_device ?? null,
         default_brightness: cfg.display.default_brightness,
+        scale: cfg.display.scale,
+        orientation: cfg.display.orientation,
       },
       screens_file: cfg.screens_file,
       default_screen: cfg.default_screen,

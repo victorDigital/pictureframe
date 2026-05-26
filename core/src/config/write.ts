@@ -50,6 +50,8 @@ export async function applyConfigPatch(
     setIfDefined(display, "brightness_backend", patch.display.brightness_backend);
     setIfDefined(display, "backlight_device", patch.display.backlight_device);
     setIfDefined(display, "default_brightness", patch.display.default_brightness);
+    setIfDefined(display, "scale", patch.display.scale);
+    setIfDefined(display, "orientation", patch.display.orientation);
   }
 
   setIfDefined(root, "default_screen", patch.default_screen);
