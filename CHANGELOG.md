@@ -5,6 +5,13 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.11] - 2026-05-26
+
+### Fixed
+
+- Built-in screens now hide the cursor from first paint inside their iframe
+  documents and only show it briefly during pointer movement.
+
 ## [0.0.10] - 2026-05-26
 
 ### Fixed

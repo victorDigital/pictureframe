@@ -61,11 +61,11 @@ function setDisplayGeometry(scale: number, orientation: "normal" | "90" | "180" 
 
 function hideCursor() {
   window.clearTimeout(cursorTimer);
-  document.documentElement.classList.add("frame-cursor-idle");
+  document.documentElement.classList.remove("frame-cursor-active");
 }
 
 function showCursorBriefly() {
-  document.documentElement.classList.remove("frame-cursor-idle");
+  document.documentElement.classList.add("frame-cursor-active");
   window.clearTimeout(cursorTimer);
   cursorTimer = window.setTimeout(hideCursor, 1200);
 }

@@ -18,6 +18,28 @@ const FONT_STACKS = {
 const VALID_THEMES = new Set(["auto", "light", "dark", "midnight"]);
 
 let cachedConfig = null;
+let cursorTimer = 0;
+
+function installCursorAutoHide() {
+    hideCursor();
+    window.addEventListener("pointermove", showCursorBriefly, { passive: true });
+    window.addEventListener("mousemove", showCursorBriefly, { passive: true });
+    window.addEventListener("pointerdown", hideCursor, { passive: true });
+    window.addEventListener("touchstart", hideCursor, { passive: true });
+    window.addEventListener("blur", hideCursor);
+    document.addEventListener("visibilitychange", hideCursor);
+}
+
+function hideCursor() {
+    window.clearTimeout(cursorTimer);
+    document.documentElement.classList.remove("frame-cursor-active");
+}
+
+function showCursorBriefly() {
+    document.documentElement.classList.add("frame-cursor-active");
+    window.clearTimeout(cursorTimer);
+    cursorTimer = window.setTimeout(hideCursor, 1200);
+}
 
 /**
  * Parse and return the config object from the iframe URL.
@@ -90,6 +112,7 @@ export function ready(id) {
  */
 export function init(id) {
     const cfg = getConfig();
+    installCursorAutoHide();
     applyTheme(cfg.theme ?? "auto");
     if (cfg.font_scale != null) applyFontScale(cfg.font_scale);
     if (cfg.font_family) applyFontFamily(cfg.font_family);

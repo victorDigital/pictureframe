@@ -8,11 +8,16 @@ body {
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   overflow: hidden;
   user-select: none;
+  cursor: none;
 }
 
-html.frame-cursor-idle,
-html.frame-cursor-idle * {
+* {
   cursor: none !important;
+}
+
+html.frame-cursor-active,
+html.frame-cursor-active * {
+  cursor: auto !important;
 }
 
 :root {

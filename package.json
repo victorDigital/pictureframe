@@ -1,7 +1,7 @@
 {
   "name": "picture-frame",
   "private": true,
-  "version": "0.0.10",
+  "version": "0.0.11",
   "description": "A repurposed laptop turned into a flexible picture-frame appliance.",
   "license": "MIT",
   "type": "module",
@@ -26,6 +26,7 @@
     "build:shared-screens": "tailwindcss -i builtin-screens/_shared/source.css -o builtin-screens/_shared/style.css --minify"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.3.0",
     "concurrently": "^9.2.1",
     "typescript": "^5.6.3"
   }
