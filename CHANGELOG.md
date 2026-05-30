@@ -5,6 +5,14 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.18] - 2026-05-30
+
+### Fixed
+
+- The kiosk launcher now performs a delayed one-shot display off/on cycle after
+  Cage has started, matching the manual display toggle that clears the visible
+  startup cursor on affected hardware.
+
 ## [0.0.17] - 2026-05-30
 
 ### Fixed
