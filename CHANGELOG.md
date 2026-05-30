@@ -5,6 +5,16 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.16] - 2026-05-30
+
+### Fixed
+
+- Kiosk cursor hiding is now permanent across the shell, built-in screens, and
+  CDP-managed URL tabs instead of briefly restoring the default pointer during
+  mouse movement.
+- The kiosk launcher now installs and selects a transparent cursor theme so the
+  Wayland/Chromium cursor surface stays invisible during startup and page loads.
+
 ## [0.0.15] - 2026-05-30
 
 ### Added

@@ -1,7 +1,7 @@
 {
   "name": "picture-frame",
   "private": true,
-  "version": "0.0.15",
+  "version": "0.0.16",
   "description": "A repurposed laptop turned into a flexible picture-frame appliance.",
   "license": "MIT",
   "type": "module",

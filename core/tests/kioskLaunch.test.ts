@@ -16,6 +16,26 @@ test("kiosk launch script keeps the display awake", async () => {
   assert.match(script, /--what=idle:sleep:handle-lid-switch/);
 });
 
+test("kiosk launch script installs and selects the transparent cursor theme", async () => {
+  const scriptPath = path.resolve(import.meta.dirname, "../../deploy/launch-chromium.sh");
+  const cursorAssetPath = path.resolve(
+    import.meta.dirname,
+    "../../deploy/cursor/transparent.xcursor.b64",
+  );
+  const script = await fs.readFile(scriptPath, "utf8");
+  const cursorAsset = await fs.readFile(cursorAssetPath, "utf8");
+  const cursor = Buffer.from(cursorAsset.replace(/\s+/g, ""), "base64");
+  const unit = await fs.readFile(
+    path.resolve(import.meta.dirname, "../../deploy/systemd/frame-kiosk.service"),
+    "utf8",
+  );
+
+  assert.equal(cursor.subarray(0, 4).toString("ascii"), "Xcur");
+  assert.match(script, /install-transparent-theme\.sh/);
+  assert.match(script, /XCURSOR_THEME="\$\{FRAME_XCURSOR_THEME:-frame-transparent\}"/);
+  assert.match(unit, /Environment=XCURSOR_THEME=frame-transparent/);
+});
+
 test("kiosk launch script is valid bash", async () => {
   const scriptPath = path.resolve(import.meta.dirname, "../../deploy/launch-chromium.sh");
 

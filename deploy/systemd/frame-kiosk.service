@@ -22,6 +22,7 @@ StandardOutput=journal
 StandardError=journal
 WorkingDirectory=/home/frame
 Environment=WLR_LIBINPUT_NO_DEVICES=1
+Environment=XCURSOR_THEME=frame-transparent
 Environment=XCURSOR_SIZE=1
 ExecStartPre=/opt/frame/current/deploy/wait-for-core.sh
 ExecStart=/usr/bin/cage -- /opt/frame/current/deploy/launch-chromium.sh

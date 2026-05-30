@@ -1,14 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cursorAutoHideScript } from "../src/cdp/cursor.js";
+import { cursorHideScript } from "../src/cdp/cursor.js";
 
-test("cursorAutoHideScript hides cursor by default and after pointer idle", () => {
-  const script = cursorAutoHideScript(1234);
+test("cursorHideScript forces pages to stay cursorless", () => {
+  const script = cursorHideScript();
 
-  assert.match(script, /frame-cursor-active/);
+  assert.match(script, /frame-cursor-hidden-style/);
   assert.match(script, /cursor: none !important/);
-  assert.match(script, /cursor: auto !important/);
-  assert.match(script, /pointermove/);
-  assert.match(script, /setTimeout\(hide, delayMs\)/);
-  assert.match(script, /1234/);
+  assert.doesNotMatch(script, /cursor: auto/);
+  assert.doesNotMatch(script, /pointermove/);
 });

@@ -1,7 +1,7 @@
 import EventEmitter from "node:events";
 import { WsTransport } from "./wsTransport.js";
 import { sub } from "../util/logger.js";
-import { cursorAutoHideScript } from "./cursor.js";
+import { cursorHideScript } from "./cursor.js";
 
 const log = sub("cdp.manager");
 
@@ -149,16 +149,16 @@ export class CdpManager extends EventEmitter {
     this.sessions.set(targetId, sessionId);
     await this.send(targetId, "Page.enable");
     await this.send(targetId, "Runtime.enable");
-    await this.installCursorAutoHide(targetId);
+    await this.installCursorHider(targetId);
   }
 
-  private async installCursorAutoHide(tabId: TabId) {
-    const source = cursorAutoHideScript();
+  private async installCursorHider(tabId: TabId) {
+    const source = cursorHideScript();
     await this.send(tabId, "Page.addScriptToEvaluateOnNewDocument", { source }).catch((err) =>
-      log.warn({ err, tabId }, "cursor autohide preload failed"),
+      log.warn({ err, tabId }, "cursor hide preload failed"),
     );
     await this.send(tabId, "Runtime.evaluate", { expression: source }).catch((err) =>
-      log.warn({ err, tabId }, "cursor autohide injection failed"),
+      log.warn({ err, tabId }, "cursor hide injection failed"),
     );
   }
 

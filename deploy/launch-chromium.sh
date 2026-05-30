@@ -17,6 +17,13 @@ CDP_PORT="${FRAME_CDP_PORT:-9222}"
 
 mkdir -p "$USER_DATA_DIR"
 
+if [[ "${FRAME_XCURSOR_THEME:-frame-transparent}" == "frame-transparent" ]]; then
+  CURSOR_INSTALLER="$(dirname "$0")/cursor/install-transparent-theme.sh"
+  [[ ! -x "$CURSOR_INSTALLER" ]] || "$CURSOR_INSTALLER" "${XDG_DATA_HOME:-${HOME:-/home/frame}/.local/share}/icons" || true
+fi
+export XCURSOR_THEME="${FRAME_XCURSOR_THEME:-frame-transparent}"
+export XCURSOR_PATH="${XDG_DATA_HOME:-${HOME:-/home/frame}/.local/share}/icons${XCURSOR_PATH:+:$XCURSOR_PATH}:/usr/share/icons"
+
 if command -v setterm >/dev/null 2>&1 && [[ -r /dev/tty1 && -w /dev/tty1 ]]; then
   TERM=linux setterm --blank=0 --powerdown=0 --powersave=off </dev/tty1 >/dev/tty1 2>/dev/null || true
 fi

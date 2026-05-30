@@ -15,11 +15,6 @@ body {
   cursor: none !important;
 }
 
-html.frame-cursor-active,
-html.frame-cursor-active * {
-  cursor: auto !important;
-}
-
 :root {
   --screen-scale: 1;
 }

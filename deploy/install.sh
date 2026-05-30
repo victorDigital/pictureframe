@@ -254,6 +254,12 @@ log "Installing Picture Frame boot splash"
 configure_quiet_boot
 install_plymouth_theme
 
+CURSOR_INSTALLER="$(dirname "$0")/cursor/install-transparent-theme.sh"
+if [[ -x "$CURSOR_INSTALLER" ]]; then
+  log "Installing transparent cursor theme"
+  "$CURSOR_INSTALLER" /usr/share/icons
+fi
+
 # Node 22.x via NodeSource (both distros ship older versions in main archive).
 if ! command -v node >/dev/null 2>&1 || [[ "$(node -v 2>/dev/null | sed -E 's/v([0-9]+).*/\1/')" -lt 22 ]]; then
   log "Installing Node.js 22.x from NodeSource"
