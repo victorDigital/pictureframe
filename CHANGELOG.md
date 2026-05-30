@@ -5,6 +5,21 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.20] - 2026-05-30
+
+### Changed
+
+- Rebuilt all built-in screens as React components in a dedicated
+  `@frame/builtin-screens` workspace with a shared Vite/Tailwind bundle.
+- Built-in screen entrypoints now mount the shared `/builtin/_app` assets
+  instead of carrying per-screen inline scripts, styles, and legacy runtime
+  glue.
+
+### Removed
+
+- Removed the old built-in screen shared runtime/style pipeline and obsolete
+  per-screen JavaScript/CSS assets.
+
 ## [0.0.19] - 2026-05-30
 
 ### Changed

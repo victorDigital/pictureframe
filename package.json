@@ -1,7 +1,7 @@
 {
   "name": "picture-frame",
   "private": true,
-  "version": "0.0.19",
+  "version": "0.0.20",
   "description": "A repurposed laptop turned into a flexible picture-frame appliance.",
   "license": "MIT",
   "type": "module",
@@ -10,9 +10,9 @@
   },
   "workspaces": [
     "core",
+    "builtin-screens",
     "kiosk",
-    "web",
-    "builtin-screens/*"
+    "web"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
@@ -22,8 +22,7 @@
     "dev:web": "npm run dev --workspace web",
     "dev:kiosk": "npm run dev --workspace kiosk",
     "dev": "concurrently -k -n core,web,kiosk -c blue,green,magenta 'npm:dev:core' 'npm:dev:web' 'npm:dev:kiosk'",
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "build:shared-screens": "tailwindcss -i builtin-screens/_shared/source.css -o builtin-screens/_shared/style.css --minify"
+    "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.0",

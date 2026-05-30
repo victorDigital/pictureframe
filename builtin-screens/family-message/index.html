@@ -2,115 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Family message</title>
-    <link rel="stylesheet" href="/builtin/_shared/style.css" />
+    <link rel="stylesheet" href="/builtin/_app/style.css" />
   </head>
-  <body class="screen-root">
-    <main
-      id="panel"
-      class="flex flex-col gap-6 w-full max-w-4xl px-8 py-12 items-center justify-center min-h-0"
-    >
-      <blockquote
-        id="msg"
-        class="text-title-lg text-foreground text-balance leading-snug w-full m-0"
-      ></blockquote>
-      <p id="signature" class="text-body text-primary hidden w-full"></p>
-    </main>
-    <footer
-      id="meta"
-      class="fixed inset-x-0 bottom-0 px-8 pb-8 text-center text-caption tabular"
-    ></footer>
-    <script type="module">
-      import { init, fetchWithTimeout, formatTime } from "/builtin/_shared/runtime.js";
-
-      const config = init("family-message");
-
-      if (config.background) {
-        document.documentElement.style.setProperty("--background", config.background);
-      }
-      if (config.color) {
-        document.documentElement.style.setProperty("--foreground", config.color);
-      }
-
-      const WEIGHT = {
-        light: "font-light",
-        normal: "font-normal",
-        medium: "font-medium",
-        semibold: "font-semibold",
-        bold: "font-bold",
-      };
-      const ALIGN = {
-        left: "text-left items-start",
-        center: "text-center items-center",
-        right: "text-right items-end",
-      };
-
-      const weight = WEIGHT[config.font_weight] ?? WEIGHT.normal;
-      const align = config.text_align ?? "center";
-      const alignMsg = ALIGN[align] ?? ALIGN.center;
-
-      const panel = document.getElementById("panel");
-      const msg = document.getElementById("msg");
-      const signature = document.getElementById("signature");
-      const meta = document.getElementById("meta");
-
-      msg.classList.add(weight, alignMsg.split(" ")[0]);
-      panel.classList.remove("items-center");
-      for (const cls of alignMsg.split(" ")) panel.classList.add(cls);
-
-      if (config.signature_text?.trim()) {
-        signature.textContent = config.signature_text.trim();
-        signature.classList.remove("hidden");
-        signature.classList.add(alignMsg.split(" ")[0]);
-      }
-
-      const showFooter = config.show_footer !== false;
-      if (!showFooter) meta.classList.add("hidden");
-
-      function renderEmpty(label) {
-        msg.innerHTML =
-          '<span class="text-muted-foreground font-normal text-title-sm">' +
-          escapeHtml(label) +
-          "</span>";
-        if (showFooter) meta.textContent = "";
-      }
-
-      function escapeHtml(s) {
-        return String(s)
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;");
-      }
-
-      async function refresh() {
-        try {
-          const r = await fetchWithTimeout("/api/family_message/current");
-          if (!r.ok) throw new Error("HTTP " + r.status);
-          const data = await r.json();
-          if (data.message) {
-            msg.textContent = data.message;
-            if (showFooter) {
-              const when = new Date(data.posted_at);
-              const remaining = Math.max(0, data.expires_at - Date.now());
-              const min = Math.round(remaining / 60000);
-              meta.textContent =
-                "Posted " +
-                formatTime(when) +
-                " — visible for " +
-                min +
-                " min";
-            }
-          } else {
-            renderEmpty("No message.");
-          }
-        } catch (e) {
-          renderEmpty(String(e));
-        }
-      }
-
-      refresh();
-      setInterval(refresh, 10000);
-    </script>
+  <body>
+    <div id="root" data-screen-id="family-message"></div>
+    <script type="module" src="/builtin/_app/app.js"></script>
   </body>
 </html>

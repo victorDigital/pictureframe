@@ -4,20 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Ambient</title>
-    <link rel="stylesheet" href="/builtin/_shared/style.css" />
+    <link rel="stylesheet" href="/builtin/_app/style.css" />
   </head>
-  <body class="screen-root bg-black">
-    <canvas id="cv" class="fixed inset-0 z-0 size-full" aria-hidden="true"></canvas>
-    <div id="clock" class="hidden"></div>
-
-    <script type="module">
-      import { init } from "/builtin/_shared/runtime.js";
-      import { startAmbient, startClock } from "./assets/ambient.js";
-
-      const config = init("ambient");
-
-      startAmbient(document.getElementById("cv"), config);
-      startClock(document.getElementById("clock"), config);
-    </script>
+  <body>
+    <div id="root" data-screen-id="ambient"></div>
+    <script type="module" src="/builtin/_app/app.js"></script>
   </body>
 </html>
