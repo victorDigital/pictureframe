@@ -5,6 +5,14 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.17] - 2026-05-30
+
+### Fixed
+
+- The kiosk service now installs the transparent cursor theme before Cage
+  starts and exports the cursor search path at the service level, so the cursor
+  is hidden on cold boot instead of only after a later display toggle.
+
 ## [0.0.16] - 2026-05-30
 
 ### Fixed

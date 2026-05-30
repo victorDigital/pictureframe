@@ -34,6 +34,11 @@ test("kiosk launch script installs and selects the transparent cursor theme", as
   assert.match(script, /install-transparent-theme\.sh/);
   assert.match(script, /XCURSOR_THEME="\$\{FRAME_XCURSOR_THEME:-frame-transparent\}"/);
   assert.match(unit, /Environment=XCURSOR_THEME=frame-transparent/);
+  assert.match(unit, /Environment=XCURSOR_PATH=\/home\/frame\/\.local\/share\/icons:\/usr\/share\/icons/);
+  assert.match(
+    unit,
+    /ExecStartPre=\/opt\/frame\/current\/deploy\/cursor\/install-transparent-theme\.sh \/home\/frame\/\.local\/share\/icons[\s\S]*ExecStart=\/usr\/bin\/cage/,
+  );
 });
 
 test("kiosk launch script is valid bash", async () => {
