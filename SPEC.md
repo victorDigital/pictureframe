@@ -42,6 +42,7 @@ A repurposed laptop running a flexible, extensible information display. Boots in
 - `ddcutil` — external monitor brightness if applicable
 - `websockify` — WebSocket proxy for the in-browser VNC viewer
 - `avahi-daemon` — `frame.local` mDNS discovery
+- `plymouth`, `plymouth-themes` — quiet graphical boot splash
 - `logrotate`
 - `tailscale` (optional, recommended) — remote SSH
 
@@ -51,7 +52,9 @@ On Debian 12, `cage` is in `bookworm-backports`; the install script enables back
 
 **Time sync:** `systemd-timesyncd` is enabled by default on both distributions. The install script verifies this is running. The clock screen displays a small warning indicator if the clock is reported unsynchronized.
 
-**Auto-login:** `frame` user via systemd getty override. Then `frame-kiosk.service` starts cage, which launches chromium with CDP enabled over a Unix domain socket (see §3.2 for the security rationale).
+**Auto-login:** `frame-kiosk.service` owns tty1 as the `frame` user, starts cage, then launches chromium with CDP enabled over a Unix domain socket (see §3.2 for the security rationale).
+
+**Boot splash:** the installer configures Plymouth with the Picture Frame theme, adds quiet kernel boot flags, and clears tty1 before cage starts so normal kernel/systemd console output is hidden during startup.
 
 ---
 
@@ -620,7 +623,7 @@ The earlier draft had sudoers wildcards on backlight paths. Wildcards in sudoers
 
 **Log rotation.** Service logs go through systemd-journald (size-capped). The updater's `update.log` and per-migration logs in `/opt/frame/state/` rotate via a logrotate config: 7-day retention, 10 MB max per file, gzip old. Installed by the deploy step.
 
-**Boot speed.** Target boot-to-display under 60 s. `apt-daily.timer` and `apt-daily-upgrade.timer` are disabled (OS updates are manual via SSH; the frame's GitHub updater is the application update path).
+**Boot speed.** Target boot-to-display under 60 s. `apt-daily.timer` and `apt-daily-upgrade.timer` are disabled (OS updates are manual via SSH; the frame's GitHub updater is the application update path). Plymouth stays minimal: a centered Picture Frame icon and one progress bar, with no boot log text unless the operator toggles detailed output.
 
 **MQTT failure surfacing.** The MQTT client distinguishes three states: connected, retrying (transient failure or network), and `auth_failed` (broker rejected credentials). The latter surfaces as a distinct badge in the UI and the `binary_sensor.frame_mqtt_auth_ok` HA entity, so a fat-fingered password rotation doesn't silently break HA integration. Retries use exponential backoff; auth failures stop retrying after 5 attempts and require manual fix-and-retry.
 

@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Picture Frame
+Description=Minimal Picture Frame startup splash
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/frame
+ScriptFile=/usr/share/plymouth/themes/frame/frame.script

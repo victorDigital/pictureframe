@@ -1,0 +1,41 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
+
+test("kiosk launch script keeps the display awake", async () => {
+  const scriptPath = path.resolve(import.meta.dirname, "../../deploy/launch-chromium.sh");
+  const script = await fs.readFile(scriptPath, "utf8");
+
+  assert.match(script, /setterm --blank=0 --powerdown=0 --powersave=off/);
+  assert.match(script, /systemd-inhibit/);
+  assert.match(script, /--what=idle:sleep:handle-lid-switch/);
+});
+
+test("kiosk launch script is valid bash", async () => {
+  const scriptPath = path.resolve(import.meta.dirname, "../../deploy/launch-chromium.sh");
+
+  await execFileAsync("bash", ["-n", scriptPath]);
+});
+
+test("installer bundles valid Plymouth splash assets", async () => {
+  const deployDir = path.resolve(import.meta.dirname, "../../deploy");
+  const installScript = await fs.readFile(path.join(deployDir, "install.sh"), "utf8");
+
+  assert.match(installScript, /\bplymouth\b/);
+  assert.match(installScript, /\bplymouth-themes\b/);
+
+  const theme = await fs.readFile(path.join(deployDir, "plymouth/frame.plymouth"), "utf8");
+  assert.match(theme, /ModuleName=script/);
+  assert.match(theme, /ScriptFile=\/usr\/share\/plymouth\/themes\/frame\/frame\.script/);
+
+  for (const asset of ["frame-logo", "progress-track", "progress-fill"]) {
+    const raw = await fs.readFile(path.join(deployDir, `plymouth/${asset}.png.b64`), "utf8");
+    const png = Buffer.from(raw.replace(/\s+/g, ""), "base64");
+    assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+  }
+});

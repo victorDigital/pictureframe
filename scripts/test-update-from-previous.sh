@@ -52,7 +52,9 @@ fi
 
 bash -n "$tmp/staging/deploy/root-helper"
 bash -n "$tmp/staging/deploy/install-os-packages.sh"
-if sudo -n true 2>/dev/null; then
+if command -v visudo >/dev/null 2>&1; then
+  visudo -cf "$tmp/staging/deploy/sudoers.d/frame" >/dev/null
+elif sudo -n true 2>/dev/null; then
   sudo visudo -cf "$tmp/staging/deploy/sudoers.d/frame" >/dev/null
 else
   echo "sudo unavailable without a password; skipping visudo syntax check."

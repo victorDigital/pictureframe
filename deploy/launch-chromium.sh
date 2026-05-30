@@ -17,11 +17,26 @@ CDP_PORT="${FRAME_CDP_PORT:-9222}"
 
 mkdir -p "$USER_DATA_DIR"
 
+if command -v setterm >/dev/null 2>&1 && [[ -r /dev/tty1 && -w /dev/tty1 ]]; then
+  TERM=linux setterm --blank=0 --powerdown=0 --powersave=off </dev/tty1 >/dev/tty1 2>/dev/null || true
+fi
+
 if command -v ydotool >/dev/null 2>&1; then
   (sleep "${FRAME_CURSOR_NUDGE_DELAY_SEC:-3}"; ydotool mousemove --absolute -x 99999 -y 99999 >/dev/null 2>&1 || true) &
 fi
 
-exec "$CHROMIUM_BIN" \
+INHIBIT=()
+if command -v systemd-inhibit >/dev/null 2>&1; then
+  INHIBIT=(
+    systemd-inhibit
+    --what=idle:sleep:handle-lid-switch
+    --who=pictureframe
+    --why="Picture Frame kiosk display must stay on"
+    --mode=block
+  )
+fi
+
+exec "${INHIBIT[@]}" "$CHROMIUM_BIN" \
   --kiosk \
   --no-first-run \
   --no-default-browser-check \

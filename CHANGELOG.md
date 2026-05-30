@@ -5,6 +5,22 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.15] - 2026-05-30
+
+### Added
+
+- Fresh installs now provision a minimal Plymouth boot splash and quiet kernel
+  boot flags.
+
+### Fixed
+
+- Hardware display scale and orientation are now reapplied after the display is
+  powered back on, and the shell fallback is cleared once `wlr-randr` applies
+  the geometry.
+- The kiosk launch script now disables tty blanking and uses `systemd-inhibit`
+  when available so laptop power management does not blank or suspend the
+  display.
+
 ## [0.0.14] - 2026-05-27
 
 ### Fixed

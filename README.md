@@ -23,7 +23,7 @@ The installer:
 - Creates the `frame` user/group and joins the `video`, `render`, `input`,
   `tty`, `i2c` groups
 - Installs `cage`, `chromium`, `wayvnc`, `websockify`, `avahi-daemon`,
-  `ddcutil`, Node 22, and a few small CLIs
+  `ddcutil`, `plymouth`, Node 22, and a few small CLIs
 - Lays out `/opt/frame` with `releases/`, `snapshots/`, `state/`, `shared/`
 - Detects the backlight device (`intel_backlight`, `amdgpu_bl0`, …) and
   installs a udev rule granting the `frame` group write access — no sudo
@@ -32,7 +32,9 @@ The installer:
   restart timer
 - Installs a root-owned helper with a narrow sudoers allowlist for package
   installs, service restarts, and reboot
-- Sets up `frame` autologin on tty1, then cage launches Chromium against
+- Installs a minimal Plymouth boot splash with a Picture Frame icon and
+  progress bar, and applies quiet kernel boot flags
+- Runs the `frame` kiosk session on tty1, then cage launches Chromium against
   `http://localhost:8080/shell/`
 - Prompts for a bearer token, VNC password, and MQTT password (or auto-
   generates them with `--non-interactive`)

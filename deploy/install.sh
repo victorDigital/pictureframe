@@ -142,6 +142,8 @@ BASE_PACKAGES=(
   novnc
   avahi-daemon
   logrotate
+  plymouth
+  plymouth-themes
   ca-certificates
   # node-pty (terminal feature) and other native modules: prebuilds don't
   # cover linux-arm64 reliably, so we keep the toolchain installed.
@@ -160,6 +162,97 @@ if [[ "$BACKPORTS_NEEDED" -eq 1 ]]; then
 else
   apt-get install -y -qq cage
 fi
+
+install_plymouth_theme() {
+  local src_dir theme_dir asset
+  src_dir="$(dirname "$0")/plymouth"
+  theme_dir="/usr/share/plymouth/themes/frame"
+
+  if [[ ! -d "$src_dir" ]]; then
+    warn "Plymouth theme assets missing; boot splash will use the distro default."
+    return
+  fi
+
+  install -d -o root -g root -m 0755 "$theme_dir"
+  install -o root -g root -m 0644 "$src_dir/frame.plymouth" "$src_dir/frame.script" "$theme_dir/"
+
+  for asset in frame-logo progress-track progress-fill; do
+    if [[ ! -f "$src_dir/${asset}.png.b64" ]]; then
+      warn "Missing ${asset}.png.b64; boot splash will use the distro default."
+      return
+    fi
+    base64 -d "$src_dir/${asset}.png.b64" > "$theme_dir/${asset}.png"
+    chmod 0644 "$theme_dir/${asset}.png"
+  done
+
+  if command -v plymouth-set-default-theme >/dev/null 2>&1; then
+    if plymouth-set-default-theme -R frame; then
+      return
+    fi
+    warn "plymouth-set-default-theme failed; falling back to update-alternatives."
+  fi
+
+  if command -v update-alternatives >/dev/null 2>&1; then
+    update-alternatives --install /usr/share/plymouth/themes/default.plymouth \
+      default.plymouth "$theme_dir/frame.plymouth" 100 >/dev/null
+    update-alternatives --set default.plymouth "$theme_dir/frame.plymouth" >/dev/null
+  fi
+
+  if command -v update-initramfs >/dev/null 2>&1; then
+    update-initramfs -u
+  fi
+}
+
+configure_quiet_boot() {
+  local grub current arg tmp
+  grub="/etc/default/grub"
+
+  if [[ ! -f "$grub" ]]; then
+    warn "$grub not found; leaving kernel boot output unchanged."
+    return
+  fi
+
+  current="$(sed -n -E 's/^GRUB_CMDLINE_LINUX_DEFAULT="(.*)"/\1/p' "$grub" | tail -n 1)"
+  for arg in quiet splash loglevel=3 systemd.show_status=auto rd.udev.log_level=3 vt.global_cursor_default=0; do
+    if [[ " $current " != *" $arg "* ]]; then
+      current="${current:+$current }$arg"
+    fi
+  done
+
+  tmp="$(mktemp)"
+  awk -v value="$current" '
+    BEGIN { written = 0 }
+    /^GRUB_CMDLINE_LINUX_DEFAULT=/ {
+      print "GRUB_CMDLINE_LINUX_DEFAULT=\"" value "\""
+      written = 1
+      next
+    }
+    { print }
+    END {
+      if (!written) {
+        print "GRUB_CMDLINE_LINUX_DEFAULT=\"" value "\""
+      }
+    }
+  ' "$grub" > "$tmp"
+  install -o root -g root -m 0644 "$tmp" "$grub"
+  rm -f "$tmp"
+
+  if [[ -d /etc/initramfs-tools/conf.d ]]; then
+    printf 'FRAMEBUFFER=y\n' > /etc/initramfs-tools/conf.d/frame-splash
+  fi
+
+  if command -v update-grub >/dev/null 2>&1; then
+    update-grub
+  elif command -v grub-mkconfig >/dev/null 2>&1 && [[ -d /boot/grub ]]; then
+    grub-mkconfig -o /boot/grub/grub.cfg
+  else
+    warn "GRUB update command not found; quiet boot flags were written but may need manual refresh."
+  fi
+}
+
+log "Installing Picture Frame boot splash"
+configure_quiet_boot
+install_plymouth_theme
 
 # Node 22.x via NodeSource (both distros ship older versions in main archive).
 if ! command -v node >/dev/null 2>&1 || [[ "$(node -v 2>/dev/null | sed -E 's/v([0-9]+).*/\1/')" -lt 22 ]]; then

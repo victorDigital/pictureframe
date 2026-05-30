@@ -1,17 +1,27 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
+import type { ExecFileOptions } from "node:child_process";
 import { promisify } from "node:util";
-import { FrameConfig } from "../config/schema.js";
+import type { FrameConfig } from "../config/schema.js";
 import { sub } from "../util/logger.js";
 import { wlSessionEnv } from "./wayland.js";
 
-const exec = promisify(execFile);
+type CommandRunner = (
+  file: string,
+  args?: string[],
+  options?: ExecFileOptions,
+) => Promise<{ stdout: string; stderr: string }>;
+
+const exec = promisify(execFile) as CommandRunner;
 const log = sub("brightness");
 const rootHelper = "/usr/local/lib/frame/root-helper";
 
 export class Brightness {
-  constructor(private cfg: FrameConfig) {}
+  constructor(
+    private cfg: FrameConfig,
+    private run: CommandRunner = exec,
+  ) {}
 
   updateConfig(cfg: FrameConfig) {
     this.cfg = cfg;
@@ -40,7 +50,7 @@ export class Brightness {
       }
     }
     if (backend === "ddcutil") {
-      const { stdout } = await exec("ddcutil", ["getvcp", "10", "--terse"]);
+      const { stdout } = await this.run("ddcutil", ["getvcp", "10", "--terse"]);
       const m = stdout.match(/VCP 10 C (\d+) (\d+)/);
       if (!m) return this.cfg.display.default_brightness;
       const [, cur, max] = m;
@@ -69,7 +79,7 @@ export class Brightness {
         throw err;
       }
     } else if (backend === "ddcutil") {
-      await exec("ddcutil", ["setvcp", "10", String(clamped)]);
+      await this.run("ddcutil", ["setvcp", "10", String(clamped)]);
     }
   }
 
@@ -77,8 +87,8 @@ export class Brightness {
     log.warn("reboot requested via API");
     setTimeout(
       () =>
-        exec("sudo", ["-n", rootHelper, "reboot"]).catch(() =>
-          exec("sudo", ["-n", "/usr/bin/systemctl", "reboot"]).catch((err) => {
+        this.run("sudo", ["-n", rootHelper, "reboot"]).catch(() =>
+          this.run("sudo", ["-n", "/usr/bin/systemctl", "reboot"]).catch((err) => {
             log.error({ err: String(err) }, "reboot command failed");
           }),
         ),
@@ -89,48 +99,56 @@ export class Brightness {
 
   async displayPower(state: "on" | "off"): Promise<{ ok: true }> {
     const env = { ...process.env, ...(await wlSessionEnv()) };
-    if (await commandExists("wlopm")) {
+    if (await commandExists("wlopm", this.run)) {
       try {
-        await exec("wlopm", [state === "off" ? "--off" : "--on", "*"], { env });
+        await this.run("wlopm", [state === "off" ? "--off" : "--on", "*"], { env });
+        if (state === "on") await this.applyDisplayConfig();
         return { ok: true };
       } catch (err) {
         log.warn({ err: String(err) }, "wlopm failed; trying wlr-randr");
       }
     }
-    if (!(await commandExists("wlr-randr"))) {
+    if (!(await commandExists("wlr-randr", this.run))) {
       throw new Error(
         "display_power_missing_package: wlr-randr or wlopm is missing; apply the latest update so the updater installs declared OS packages",
       );
     }
-    const { stdout } = await exec("wlr-randr", [], { env });
+    const { stdout } = await this.run("wlr-randr", [], { env });
     const outputs = parseWlrOutputs(stdout);
     await Promise.all(
       outputs.map((output) =>
-        exec("wlr-randr", ["--output", output, state === "off" ? "--off" : "--on"], {
+        this.run("wlr-randr", ["--output", output, state === "off" ? "--off" : "--on"], {
           env,
         }),
       ),
     );
+    if (state === "on") await this.applyDisplayConfig();
     return { ok: true };
   }
 
-  async applyDisplayConfig(): Promise<void> {
+  async applyDisplayConfig(): Promise<boolean> {
     const scale = this.cfg.display.scale ?? 1;
     const orientation = this.cfg.display.orientation ?? "normal";
-    if (scale === 1 && orientation === "normal") return;
-    if (!(await commandExists("wlr-randr"))) {
-      log.warn(
-        { scale, orientation },
-        "wlr-randr missing; hardware display geometry not applied",
-      );
-      return;
+    const isDefault = scale === 1 && orientation === "normal";
+    if (!(await commandExists("wlr-randr", this.run))) {
+      if (!isDefault) {
+        log.warn(
+          { scale, orientation },
+          "wlr-randr missing; hardware display geometry not applied",
+        );
+      }
+      return false;
     }
     const env = { ...process.env, ...(await wlSessionEnv()) };
-    const { stdout } = await exec("wlr-randr", [], { env });
+    const { stdout } = await this.run("wlr-randr", [], { env });
     const outputs = parseWlrOutputs(stdout);
+    if (outputs.length === 0) {
+      log.warn("wlr-randr reported no outputs; hardware display geometry not applied");
+      return false;
+    }
     await Promise.all(
       outputs.map((output) =>
-        exec(
+        this.run(
           "wlr-randr",
           ["--output", output, "--scale", String(scale), "--transform", orientation],
           { env },
@@ -138,6 +156,7 @@ export class Brightness {
       ),
     );
     log.info({ scale, orientation, outputs }, "display geometry applied");
+    return true;
   }
 
   private async backlightDevice(): Promise<string | undefined> {
@@ -151,9 +170,9 @@ export class Brightness {
   }
 }
 
-async function commandExists(command: string): Promise<boolean> {
+async function commandExists(command: string, run: CommandRunner): Promise<boolean> {
   try {
-    await exec("sh", ["-c", `command -v ${command}`]);
+    await run("sh", ["-c", `command -v ${command}`]);
     return true;
   } catch {
     return false;
