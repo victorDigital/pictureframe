@@ -16,16 +16,13 @@ test("kiosk launch script keeps the display awake", async () => {
   assert.match(script, /--what=idle:sleep:handle-lid-switch/);
 });
 
-test("kiosk launch script power-cycles the display after startup", async () => {
+test("kiosk launch script leaves boot display recovery to frame-core lifecycle", async () => {
   const scriptPath = path.resolve(import.meta.dirname, "../../deploy/launch-chromium.sh");
   const script = await fs.readFile(scriptPath, "utf8");
 
-  assert.match(script, /FRAME_BOOT_DISPLAY_CYCLE/);
-  assert.match(script, /FRAME_BOOT_DISPLAY_CYCLE_DELAY_SEC:-4/);
-  assert.match(script, /wlopm --off "\*"/);
-  assert.match(script, /wlopm --on "\*"/);
-  assert.match(script, /wlr-randr --output "\$output" --off/);
-  assert.match(script, /wlr-randr --output "\$output" --on/);
+  assert.doesNotMatch(script, /FRAME_BOOT_DISPLAY_CYCLE/);
+  assert.doesNotMatch(script, /wlopm --off/);
+  assert.doesNotMatch(script, /wlr-randr --output "\$output" --off/);
 });
 
 test("kiosk launch script installs and selects the transparent cursor theme", async () => {

@@ -32,28 +32,6 @@ if command -v ydotool >/dev/null 2>&1; then
   (sleep "${FRAME_CURSOR_NUDGE_DELAY_SEC:-3}"; ydotool mousemove --absolute -x 99999 -y 99999 >/dev/null 2>&1 || true) &
 fi
 
-if [[ "${FRAME_BOOT_DISPLAY_CYCLE:-1}" != "0" ]]; then
-  (
-    sleep "${FRAME_BOOT_DISPLAY_CYCLE_DELAY_SEC:-4}"
-    if command -v wlopm >/dev/null 2>&1; then
-      wlopm --off "*" >/dev/null 2>&1 || exit 0
-      sleep "${FRAME_BOOT_DISPLAY_CYCLE_OFF_SEC:-0.5}"
-      wlopm --on "*" >/dev/null 2>&1 || true
-      exit 0
-    fi
-    if command -v wlr-randr >/dev/null 2>&1; then
-      mapfile -t outputs < <(wlr-randr | awk 'length($0) > 0 && $0 !~ /^ / { print $1 }')
-      for output in "${outputs[@]}"; do
-        wlr-randr --output "$output" --off >/dev/null 2>&1 || true
-      done
-      sleep "${FRAME_BOOT_DISPLAY_CYCLE_OFF_SEC:-0.5}"
-      for output in "${outputs[@]}"; do
-        wlr-randr --output "$output" --on >/dev/null 2>&1 || true
-      done
-    fi
-  ) &
-fi
-
 INHIBIT=()
 if command -v systemd-inhibit >/dev/null 2>&1; then
   INHIBIT=(

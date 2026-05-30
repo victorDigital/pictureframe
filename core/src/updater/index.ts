@@ -21,6 +21,7 @@ import { Quarantine } from "./quarantine.js";
 import { preflightCheck } from "./preflight.js";
 import { runCommand } from "./exec.js";
 import { releaseOsPackages } from "./osPackages.js";
+import { planReleaseServices, type ReleaseServicePlan } from "./servicePlan.js";
 
 const log = sub("updater");
 const rootHelper = "/usr/local/lib/frame/root-helper";
@@ -232,6 +233,7 @@ export class Updater {
       if (!integrity.ok) {
         throw new Error(`migration_history_diverged: ${integrity.reason}`);
       }
+      const servicePlan = await planReleaseServices(paths.current, staging);
 
       this.setPhase("snapshot", "Snapshotting config");
       const snapshotDir = await snapshotConfig({
@@ -293,8 +295,8 @@ export class Updater {
       });
       await fs.rename(paths.current + ".new", paths.current);
 
-      this.setPhase("restart", "Restarting frame-core");
-      await this.restartCore();
+      this.setPhase("restart", this.restartDetail(servicePlan));
+      await this.restartServices(servicePlan);
       this.setPhase("health", "Waiting for frame-core health check");
       const healthy = await this.waitHealthy(this.store.current.config.updater.health_check_window_sec);
       if (!healthy) {
@@ -449,6 +451,32 @@ export class Updater {
     } catch (helperErr) {
       await runCommand("sudo", ["-n", "/usr/bin/systemctl", "restart", "frame-core"], {
         logName: "systemctl-restart-legacy.log",
+      }).catch(() => {
+        throw helperErr;
+      });
+    }
+  }
+
+  private async restartServices(plan: ReleaseServicePlan) {
+    if (plan.restartKiosk) {
+      await this.restartKiosk();
+    }
+    await this.restartCore();
+  }
+
+  private restartDetail(plan: ReleaseServicePlan) {
+    if (!plan.restartKiosk) return "Restarting frame-core";
+    return `Restarting frame-kiosk and frame-core (${plan.changedKioskPaths.join(", ")})`;
+  }
+
+  private async restartKiosk() {
+    try {
+      await runCommand("sudo", ["-n", rootHelper, "restart-kiosk"], {
+        logName: "systemctl-restart-kiosk.log",
+      });
+    } catch (helperErr) {
+      await runCommand("sudo", ["-n", "/usr/bin/systemctl", "restart", "frame-kiosk"], {
+        logName: "systemctl-restart-kiosk-legacy.log",
       }).catch(() => {
         throw helperErr;
       });

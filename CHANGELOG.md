@@ -5,6 +5,25 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.19] - 2026-05-30
+
+### Changed
+
+- Boot display recovery now runs from a frame-core kiosk lifecycle hook after
+  the shell WebSocket connects, instead of racing Cage and Wayland startup from
+  the Chromium launch script.
+- Display power and hardware geometry operations now share one
+  `DisplayController` path with focused tests for `wlopm` fallback and output
+  parsing.
+- The updater now plans service restarts and restarts `frame-kiosk` before
+  `frame-core` when kiosk, built-in screen, or deploy launch assets changed.
+
+### Fixed
+
+- Update compatibility checks now syntax-check all deploy shell scripts and
+  verify systemd unit references point at files included in the release
+  archive.
+
 ## [0.0.18] - 2026-05-30
 
 ### Fixed

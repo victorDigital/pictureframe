@@ -1,30 +1,29 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { execFile } from "node:child_process";
-import type { ExecFileOptions } from "node:child_process";
-import { promisify } from "node:util";
 import type { FrameConfig } from "../config/schema.js";
 import { sub } from "../util/logger.js";
-import { wlSessionEnv } from "./wayland.js";
+import {
+  defaultCommandRunner,
+  DisplayController,
+  type CommandRunner,
+} from "./displayController.js";
 
-type CommandRunner = (
-  file: string,
-  args?: string[],
-  options?: ExecFileOptions,
-) => Promise<{ stdout: string; stderr: string }>;
-
-const exec = promisify(execFile) as CommandRunner;
 const log = sub("brightness");
 const rootHelper = "/usr/local/lib/frame/root-helper";
 
 export class Brightness {
+  private display: DisplayController;
+
   constructor(
     private cfg: FrameConfig,
-    private run: CommandRunner = exec,
-  ) {}
+    private run: CommandRunner = defaultCommandRunner,
+  ) {
+    this.display = new DisplayController(cfg, run);
+  }
 
   updateConfig(cfg: FrameConfig) {
     this.cfg = cfg;
+    this.display.updateConfig(cfg);
   }
 
   async read(): Promise<number> {
@@ -98,65 +97,11 @@ export class Brightness {
   }
 
   async displayPower(state: "on" | "off"): Promise<{ ok: true }> {
-    const env = { ...process.env, ...(await wlSessionEnv()) };
-    if (await commandExists("wlopm", this.run)) {
-      try {
-        await this.run("wlopm", [state === "off" ? "--off" : "--on", "*"], { env });
-        if (state === "on") await this.applyDisplayConfig();
-        return { ok: true };
-      } catch (err) {
-        log.warn({ err: String(err) }, "wlopm failed; trying wlr-randr");
-      }
-    }
-    if (!(await commandExists("wlr-randr", this.run))) {
-      throw new Error(
-        "display_power_missing_package: wlr-randr or wlopm is missing; apply the latest update so the updater installs declared OS packages",
-      );
-    }
-    const { stdout } = await this.run("wlr-randr", [], { env });
-    const outputs = parseWlrOutputs(stdout);
-    await Promise.all(
-      outputs.map((output) =>
-        this.run("wlr-randr", ["--output", output, state === "off" ? "--off" : "--on"], {
-          env,
-        }),
-      ),
-    );
-    if (state === "on") await this.applyDisplayConfig();
-    return { ok: true };
+    return this.display.power(state);
   }
 
   async applyDisplayConfig(): Promise<boolean> {
-    const scale = this.cfg.display.scale ?? 1;
-    const orientation = this.cfg.display.orientation ?? "normal";
-    const isDefault = scale === 1 && orientation === "normal";
-    if (!(await commandExists("wlr-randr", this.run))) {
-      if (!isDefault) {
-        log.warn(
-          { scale, orientation },
-          "wlr-randr missing; hardware display geometry not applied",
-        );
-      }
-      return false;
-    }
-    const env = { ...process.env, ...(await wlSessionEnv()) };
-    const { stdout } = await this.run("wlr-randr", [], { env });
-    const outputs = parseWlrOutputs(stdout);
-    if (outputs.length === 0) {
-      log.warn("wlr-randr reported no outputs; hardware display geometry not applied");
-      return false;
-    }
-    await Promise.all(
-      outputs.map((output) =>
-        this.run(
-          "wlr-randr",
-          ["--output", output, "--scale", String(scale), "--transform", orientation],
-          { env },
-        ),
-      ),
-    );
-    log.info({ scale, orientation, outputs }, "display geometry applied");
-    return true;
+    return this.display.applyConfig();
   }
 
   private async backlightDevice(): Promise<string | undefined> {
@@ -167,15 +112,6 @@ export class Brightness {
       log.warn({ configured, detected }, "using detected backlight device");
     }
     return detected ?? configured;
-  }
-}
-
-async function commandExists(command: string, run: CommandRunner): Promise<boolean> {
-  try {
-    await run("sh", ["-c", `command -v ${command}`]);
-    return true;
-  } catch {
-    return false;
   }
 }
 
@@ -198,12 +134,4 @@ async function detectBacklightDevice(): Promise<string | undefined> {
   } catch {
     return undefined;
   }
-}
-
-function parseWlrOutputs(stdout: string): string[] {
-  return stdout
-    .split("\n")
-    .filter((line) => line.length > 0 && !line.startsWith(" "))
-    .map((line) => line.trim().split(/\s+/, 1)[0])
-    .filter((name): name is string => Boolean(name));
 }

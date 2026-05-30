@@ -52,6 +52,17 @@ fi
 
 bash -n "$tmp/staging/deploy/root-helper"
 bash -n "$tmp/staging/deploy/install-os-packages.sh"
+while IFS= read -r -d '' script; do
+  bash -n "$script"
+done < <(find "$tmp/staging/deploy" -type f -name '*.sh' -print0)
+while IFS= read -r unit_path; do
+  [[ -z "$unit_path" ]] && continue
+  [[ -e "$tmp/staging${unit_path#/opt/frame/current}" ]]
+done < <(
+  grep -RhoE '/opt/frame/current/[^[:space:]]+' "$tmp/staging/deploy/systemd" \
+    | sed 's/[\";]$//' \
+    | sort -u
+)
 if command -v visudo >/dev/null 2>&1; then
   visudo -cf "$tmp/staging/deploy/sudoers.d/frame" >/dev/null
 elif sudo -n true 2>/dev/null; then

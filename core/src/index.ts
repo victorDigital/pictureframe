@@ -13,6 +13,7 @@ import { startServer } from "./api/server.js";
 import { FamilyMessages } from "./api/familyMessage.js";
 import { Updater } from "./updater/index.js";
 import { Brightness } from "./system/brightness.js";
+import { KioskLifecycle } from "./system/kioskLifecycle.js";
 import { HaBridge } from "./mqtt/index.js";
 import { VncSupervisor } from "./system/vnc.js";
 import { paths } from "./util/paths.js";
@@ -64,6 +65,9 @@ async function main() {
 
   const family = new FamilyMessages(scheduler);
   const brightness = new Brightness(store.current.config);
+  const kioskLifecycle = new KioskLifecycle({
+    displayPower: (state) => brightness.displayPower(state),
+  });
   const updater = new Updater(store, version);
   const vnc = new VncSupervisor(store.current.config.vnc?.password_file);
 
@@ -155,6 +159,7 @@ async function main() {
   // attaches, replay whatever the scheduler picked as the active screen
   // so the iframe activates.
   shell.on("connect", () => {
+    kioskLifecycle.shellConnected();
     applyDisplayGeometry().catch((err) =>
       log.warn({ err }, "could not apply display geometry"),
     );
@@ -219,6 +224,7 @@ async function main() {
     updater.stop();
     cronEngine.stop();
     vnc.stop();
+    kioskLifecycle.stop();
     await cdp.stop().catch(() => {});
     process.exit(0);
   };

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Brightness } from "../src/system/brightness.js";
+import { parseWlrOutputs } from "../src/system/displayController.js";
 import type { FrameConfig } from "../src/config/schema.js";
 
 function config(display: Partial<FrameConfig["display"]>): FrameConfig {
@@ -106,4 +107,37 @@ test("displayPower reapplies geometry after turning the display on", async () =>
     ["wlopm", "--on", "*"],
     ["wlr-randr", "--output", "eDP-1", "--scale", "1.5", "--transform", "180"],
   ]);
+});
+
+test("displayPower falls back to wlr-randr when wlopm fails", async () => {
+  const calls: string[][] = [];
+  const brightness = new Brightness(config({}), async (file, args = []) => {
+    if (file === "sh" && args[1]?.includes("wlopm")) {
+      return { stdout: "/usr/bin/wlopm\n", stderr: "" };
+    }
+    if (file === "sh" && args[1]?.includes("wlr-randr")) {
+      return { stdout: "/usr/bin/wlr-randr\n", stderr: "" };
+    }
+    if (file === "wlopm") {
+      throw new Error("no output");
+    }
+    if (file === "wlr-randr" && args.length === 0) {
+      return { stdout: "eDP-1 enabled\n  1920x1080\nHDMI-A-1 enabled\n  1920x1080\n", stderr: "" };
+    }
+    calls.push([file, ...args]);
+    return { stdout: "", stderr: "" };
+  });
+
+  assert.deepEqual(await brightness.displayPower("off"), { ok: true });
+  assert.deepEqual(calls, [
+    ["wlr-randr", "--output", "eDP-1", "--off"],
+    ["wlr-randr", "--output", "HDMI-A-1", "--off"],
+  ]);
+});
+
+test("parseWlrOutputs ignores indented mode lines", () => {
+  assert.deepEqual(
+    parseWlrOutputs("eDP-1 enabled\n  1920x1080 px\n\nHDMI-A-1 enabled\n  1280x720 px\n"),
+    ["eDP-1", "HDMI-A-1"],
+  );
 });
