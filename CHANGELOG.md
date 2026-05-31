@@ -5,6 +5,17 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.21] - 2026-05-31
+
+### Fixed
+
+- Kiosk recovery now clears stale Chromium/CDP tab state after Chromium exits,
+  reconnects CDP, and replays the active shell screen without blocking on old
+  tab IDs.
+- Added a kiosk lifecycle watchdog that restarts only `frame-kiosk` when the
+  shell disconnects, shell-rendered screens stop heartbeating, or screen replay
+  fails while `frame-core`, MQTT, and the control UI remain healthy.
+
 ## [0.0.20] - 2026-05-30
 
 ### Changed

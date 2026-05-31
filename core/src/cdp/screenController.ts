@@ -29,6 +29,11 @@ export class ScreenController {
     this.shellTabId = tabId;
   }
 
+  resetTabs() {
+    this.urlTabs.clear();
+    this.shellTabId = undefined;
+  }
+
   setMaxPreloaded(n: number) {
     this.maxPreloaded = n;
     while (this.urlTabs.size > this.maxPreloaded) {
@@ -97,7 +102,7 @@ export class ScreenController {
       this.shell.send({ type: "show_overlay_image", dataUrl: overlay, transitionMs: 0 });
     }
 
-    if (this.shellTabId) await this.cdp.activate(this.shellTabId);
+    if (this.shellTabId && this.cdp.isConnected()) await this.cdp.activate(this.shellTabId);
 
     if (target.type === "url") {
       let tab = this.urlTabs.get(target.id);

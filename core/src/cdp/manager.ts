@@ -39,23 +39,36 @@ export class CdpManager extends EventEmitter {
     const port = Number(opts.cdpPort ?? process.env.FRAME_CDP_PORT ?? 9222);
 
     log.info({ host, port }, "connecting to chromium CDP");
-    this.transport = await WsTransport.connect(host, port);
-    this.transport.on("event", (m) => this.onEvent(m as never));
-    this.transport.on("error", (err) => log.warn({ err }, "cdp transport error"));
-    this.transport.on("close", () => this.emit("chromium_exit"));
+    const transport = await WsTransport.connect(host, port);
+    this.transport = transport;
+    transport.on("event", (m) => {
+      if (this.transport === transport) this.onEvent(m as never);
+    });
+    transport.on("error", (err) => log.warn({ err }, "cdp transport error"));
+    transport.on("close", () => {
+      if (this.transport !== transport) return;
+      this.resetConnection();
+      this.emit("chromium_exit");
+    });
 
-    await this.transport.send("Target.setDiscoverTargets", { discover: true });
-    const { targetInfos } = await this.transport.send<{ targetInfos: TargetInfo[] }>(
-      "Target.getTargets",
-    );
-    for (const t of targetInfos) {
-      if (t.type === "page") {
-        this.targets.set(t.targetId, t);
-        await this.attach(t.targetId);
-        if (!this.shellTabId && t.url.startsWith(opts.shellUrl)) {
-          this.shellTabId = t.targetId;
+    try {
+      await transport.send("Target.setDiscoverTargets", { discover: true });
+      const { targetInfos } = await transport.send<{ targetInfos: TargetInfo[] }>(
+        "Target.getTargets",
+      );
+      for (const t of targetInfos) {
+        if (t.type === "page") {
+          this.targets.set(t.targetId, t);
+          await this.attach(t.targetId);
+          if (!this.shellTabId && t.url.startsWith(opts.shellUrl)) {
+            this.shellTabId = t.targetId;
+          }
         }
       }
+    } catch (err) {
+      if (this.transport === transport) this.resetConnection();
+      transport.close();
+      throw err;
     }
     log.info({ tabs: this.targets.size, shellTab: this.shellTabId }, "CDP attached");
   }
@@ -213,7 +226,17 @@ export class CdpManager extends EventEmitter {
   }
 
   async stop() {
-    this.transport?.close();
+    const transport = this.transport;
+    this.resetConnection();
+    transport?.close();
+  }
+
+  private resetConnection() {
     this.transport = undefined;
+    this.targets.clear();
+    this.sessions.clear();
+    this.loadResolvers.clear();
+    this.consoleByTab.clear();
+    this.shellTabId = undefined;
   }
 }

@@ -16,10 +16,12 @@ import { Brightness } from "./system/brightness.js";
 import { KioskLifecycle } from "./system/kioskLifecycle.js";
 import { HaBridge } from "./mqtt/index.js";
 import { VncSupervisor } from "./system/vnc.js";
+import { runCommand } from "./updater/exec.js";
 import { paths } from "./util/paths.js";
 import { sub, logger } from "./util/logger.js";
 
 const log = sub("main");
+const rootHelper = "/usr/local/lib/frame/root-helper";
 
 async function readVersion(): Promise<string> {
   try {
@@ -67,6 +69,19 @@ async function main() {
   const brightness = new Brightness(store.current.config);
   const kioskLifecycle = new KioskLifecycle({
     displayPower: (state) => brightness.displayPower(state),
+    restartKiosk: async () => {
+      try {
+        await runCommand("sudo", ["-n", rootHelper, "restart-kiosk"], {
+          logName: "watchdog-restart-kiosk.log",
+        });
+      } catch (helperErr) {
+        await runCommand("sudo", ["-n", "/usr/bin/systemctl", "restart", "frame-kiosk"], {
+          logName: "watchdog-restart-kiosk-legacy.log",
+        }).catch(() => {
+          throw helperErr;
+        });
+      }
+    },
   });
   const updater = new Updater(store, version);
   const vnc = new VncSupervisor(store.current.config.vnc?.password_file);
@@ -111,9 +126,15 @@ async function main() {
 
   scheduler.on("activate", (screen, claim) => {
     log.info({ screen: screen.id, claim: claim.claimId }, "scheduler activate");
-    screens.show(screen, screen.transitionMs ?? 600).catch((err) =>
-      log.error({ err, screen: screen.id }, "screen show failed"),
-    );
+    kioskLifecycle.activeScreenChanged({
+      id: screen.id,
+      type: screen.type,
+      renderedByShell: screen.type === "builtin" || !cdp.isConnected(),
+    });
+    screens.show(screen, screen.transitionMs ?? 600).catch((err) => {
+      log.error({ err, screen: screen.id }, "screen show failed");
+      kioskLifecycle.screenShowFailed(screen.id);
+    });
     void pushState(screen.id);
   });
 
@@ -165,10 +186,56 @@ async function main() {
     );
     const active = screens.currentScreen;
     if (active) {
-      screens.show(active, 0).catch((err) =>
-        log.error({ err, screen: active.id }, "screen replay failed"),
-      );
+      kioskLifecycle.activeScreenChanged({
+        id: active.id,
+        type: active.type,
+        renderedByShell: active.type === "builtin" || !cdp.isConnected(),
+      });
+      screens.show(active, 0).catch((err) => {
+        log.error({ err, screen: active.id }, "screen replay failed");
+        kioskLifecycle.screenShowFailed(active.id);
+      });
     }
+  });
+  shell.on("disconnect", () => kioskLifecycle.shellDisconnected());
+  shell.on("message", (msg) => {
+    if (msg.type === "heartbeat") kioskLifecycle.shellHeartbeat(msg.visible);
+  });
+
+  let cdpReconnectTimer: NodeJS.Timeout | undefined;
+  let cdpConnecting = false;
+
+  function scheduleCdpConnect(delayMs: number) {
+    if (process.env.FRAME_DISABLE_CDP === "1" || cdpReconnectTimer || cdpConnecting) return;
+    cdpReconnectTimer = setTimeout(() => {
+      cdpReconnectTimer = undefined;
+      void connectCdp();
+    }, delayMs);
+    cdpReconnectTimer.unref();
+  }
+
+  async function connectCdp() {
+    if (process.env.FRAME_DISABLE_CDP === "1" || cdp.isConnected() || cdpConnecting) return;
+    cdpConnecting = true;
+    let retry = false;
+    try {
+      await cdp.start({ shellUrl: "http://127.0.0.1:8080/shell/" });
+      const shellTab = cdp.shellTab();
+      if (shellTab) screens.setShellTab(shellTab);
+      screens.registerScreens(store.current.screens);
+    } catch (err) {
+      log.error({ err }, "CDP failed to start; URL screens limited to iframe mode");
+      retry = true;
+    } finally {
+      cdpConnecting = false;
+      if (retry) scheduleCdpConnect(15_000);
+    }
+  }
+
+  cdp.on("chromium_exit", () => {
+    screens.resetTabs();
+    kioskLifecycle.chromiumExited();
+    scheduleCdpConnect(5000);
   });
 
   const ha = new HaBridge(store.current.config, scheduler, updater, brightness);
@@ -202,14 +269,7 @@ async function main() {
   scheduler.start();
 
   if (process.env.FRAME_DISABLE_CDP !== "1") {
-    cdp
-      .start({ shellUrl: "http://127.0.0.1:8080/shell/" })
-      .then(() => {
-        const shellTab = cdp.shellTab();
-        if (shellTab) screens.setShellTab(shellTab);
-        screens.registerScreens(store.current.screens);
-      })
-      .catch((err) => log.error({ err }, "CDP failed to start; URL screens limited to iframe mode"));
+    void connectCdp();
   }
 
   updater.start();
@@ -225,6 +285,7 @@ async function main() {
     cronEngine.stop();
     vnc.stop();
     kioskLifecycle.stop();
+    if (cdpReconnectTimer) clearTimeout(cdpReconnectTimer);
     await cdp.stop().catch(() => {});
     process.exit(0);
   };

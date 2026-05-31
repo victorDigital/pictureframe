@@ -27,6 +27,7 @@ export class ShellBus extends EventEmitter {
     if (this.sink === sink) {
       this.sink = undefined;
       log.info("shell detached");
+      this.emit("disconnect");
     }
   }
 
