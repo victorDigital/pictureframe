@@ -382,6 +382,7 @@ MQTT with HA's discovery mechanism. frame-core publishes discovery messages on `
 | Entity                              | Type    | Notes                                  |
 |-------------------------------------|---------|----------------------------------------|
 | `select.frame_current_screen`       | select  | Options populated from screen list     |
+| `light.frame_backlight`             | light   | Display on/off + brightness, area-aware |
 | `number.frame_brightness`           | number  | 0–100                                  |
 | `switch.frame_display_power`        | switch  | DPMS off/on                            |
 | `button.frame_reboot`               | button  | Safe reboot                            |
@@ -561,6 +562,7 @@ updater:
 
 ha:
   enabled: true
+  suggested_area: Living Room
   mqtt:
     host: homeassistant.local
     port: 1883

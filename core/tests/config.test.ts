@@ -19,7 +19,7 @@ test("frame config validates the example", () => {
       health_check_window_sec: 60,
       retain_releases: 3,
     },
-    ha: { enabled: false },
+    ha: { enabled: false, suggested_area: "Living Room" },
   });
   assert.ok(ok.success);
 });

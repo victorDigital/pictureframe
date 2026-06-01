@@ -16,6 +16,7 @@ export class HaBridge {
   private authFailures = 0;
   private discoveryPrefix: string;
   private nodeId: string;
+  private displayPowerState: "on" | "off" = "on";
 
   constructor(
     private cfg: FrameConfig,
@@ -132,12 +133,14 @@ export class HaBridge {
   }
 
   private commonDevice() {
+    const suggestedArea = this.cfg.ha.suggested_area?.trim();
     return {
       identifiers: [this.nodeId],
       name: `Picture Frame – ${this.cfg.device.name}`,
       manufacturer: "Picture Frame",
       model: "frame-core",
       sw_version: this.updater.status().current,
+      ...(suggestedArea ? { suggested_area: suggestedArea } : {}),
     };
   }
 
@@ -218,6 +221,20 @@ export class HaBridge {
       availability,
       device,
     });
+    publish("light", "backlight", {
+      name: "Backlight",
+      command_topic: "frame/cmd/display_power",
+      state_topic: this.stateTopic("display_power"),
+      payload_on: "on",
+      payload_off: "off",
+      brightness_command_topic: "frame/cmd/brightness",
+      brightness_command_template: '{"value": {{ value }}}',
+      brightness_state_topic: this.stateTopic("brightness"),
+      brightness_scale: 100,
+      unique_id: `${this.nodeId}_backlight`,
+      availability,
+      device,
+    });
     publish("switch", "display_power", {
       name: "Display",
       command_topic: "frame/cmd/display_power",
@@ -278,6 +295,9 @@ export class HaBridge {
     this.client.publish(this.stateTopic("mqtt_auth_ok"), this.state === "auth_failed" ? "false" : "true", {
       retain: true,
     });
+    this.client.publish(this.stateTopic("display_power"), this.displayPowerState, {
+      retain: true,
+    });
     this.client.publish(this.stateTopic("uptime"), String(Math.round(process.uptime())));
     try {
       const b = await this.brightness.read();
@@ -290,7 +310,11 @@ export class HaBridge {
   private async handleCommand(topic: string, raw: string) {
     let body: Record<string, unknown> = {};
     try {
-      body = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+      const parsed: unknown = raw ? JSON.parse(raw) : {};
+      body =
+        parsed && typeof parsed === "object" && !Array.isArray(parsed)
+          ? (parsed as Record<string, unknown>)
+          : {};
     } catch {
       // some buttons send empty payloads
     }
@@ -314,12 +338,14 @@ export class HaBridge {
         break;
       }
       case "brightness": {
-        if (typeof body.value === "number") await this.brightness.write(body.value);
+        const value = typeof body.value === "number" ? body.value : Number(raw);
+        if (Number.isFinite(value)) await this.brightness.write(value);
         break;
       }
       case "display_power": {
-        const s = body.state === "off" ? "off" : "on";
+        const s = String(body.state ?? raw).trim().toLowerCase() === "off" ? "off" : "on";
         await this.brightness.displayPower(s);
+        this.displayPowerState = s;
         break;
       }
       case "reboot":

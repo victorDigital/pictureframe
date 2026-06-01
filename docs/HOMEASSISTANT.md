@@ -6,7 +6,11 @@ SPEC §6.2 appear under a single device named after `device.name`.
 
 For most setups the discovery-published entities are enough — you can
 build automations entirely around `select.frame_current_screen` and the
-`number.frame_brightness` slider in HA's UI.
+`light.frame_backlight` entity in HA's UI.
+
+Set `ha.suggested_area` in `frame.yaml` to the HA room name where the frame
+belongs. MQTT discovery publishes that as the device's area hint when Home
+Assistant first creates the device.
 
 The recipes below cover the two integrations that need glue beyond the
 out-of-the-box entities.

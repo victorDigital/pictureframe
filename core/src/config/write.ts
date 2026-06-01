@@ -84,6 +84,7 @@ export async function applyConfigPatch(
   if (patch.ha) {
     const ha = ensureMap(root, "ha", doc);
     setIfDefined(ha, "enabled", patch.ha.enabled);
+    setIfDefined(ha, "suggested_area", patch.ha.suggested_area);
     if (patch.ha.mqtt) {
       const mqtt = ensureMap(ha, "mqtt", doc);
       setIfDefined(mqtt, "host", patch.ha.mqtt.host);

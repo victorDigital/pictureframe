@@ -5,6 +5,22 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.22] - 2026-06-01
+
+### Added
+
+- Home Assistant discovery now exposes the display backlight as
+  `light.frame_backlight`, combining display power and brightness so it can
+  participate in HA area and light-group controls.
+- `ha.suggested_area` can now be set in `frame.yaml` and the Settings UI so
+  MQTT discovery suggests the frame's Home Assistant room.
+
+### Fixed
+
+- MQTT state publishing now retains `frame/<device>/display_power`, keeping
+  the existing HA display switch and the new backlight light in sync after
+  commands and reconnects.
+
 ## [0.0.21] - 2026-05-31
 
 ### Fixed

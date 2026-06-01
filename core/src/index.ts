@@ -34,8 +34,16 @@ async function readVersion(): Promise<string> {
   }
 }
 
-function haSignature(cfg: { ha: { enabled: boolean; mqtt?: unknown }; device: { name: string } }) {
-  return JSON.stringify({ enabled: cfg.ha.enabled, mqtt: cfg.ha.mqtt ?? null, name: cfg.device.name });
+function haSignature(cfg: {
+  ha: { enabled: boolean; mqtt?: unknown; suggested_area?: string };
+  device: { name: string };
+}) {
+  return JSON.stringify({
+    enabled: cfg.ha.enabled,
+    mqtt: cfg.ha.mqtt ?? null,
+    name: cfg.device.name,
+    suggested_area: cfg.ha.suggested_area ?? "",
+  });
 }
 
 async function main() {

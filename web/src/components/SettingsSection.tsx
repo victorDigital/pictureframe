@@ -75,6 +75,7 @@ type FrameConfigView = {
   };
   ha: {
     enabled: boolean;
+    suggested_area: string;
     mqtt: {
       host: string;
       port: number;
@@ -111,6 +112,7 @@ type ConfigPatch = {
   };
   ha?: {
     enabled?: boolean;
+    suggested_area?: string;
     mqtt?: {
       host?: string;
       port?: number;
@@ -577,6 +579,7 @@ function HomeAssistantTile({ cfg, save, busy }: TileProps) {
   const [port, setPort] = useState(initial.mqtt?.port ?? 1883);
   const [username, setUsername] = useState(initial.mqtt?.username ?? "");
   const [keepalive, setKeepalive] = useState(initial.mqtt?.keepalive ?? 60);
+  const [suggestedArea, setSuggestedArea] = useState(initial.suggested_area ?? "");
   const [discoveryPrefix, setDiscoveryPrefix] = useState(
     initial.mqtt?.discovery_prefix ?? "homeassistant",
   );
@@ -586,6 +589,7 @@ function HomeAssistantTile({ cfg, save, busy }: TileProps) {
   useEffect(() => setPort(initial.mqtt?.port ?? 1883), [initial.mqtt?.port]);
   useEffect(() => setUsername(initial.mqtt?.username ?? ""), [initial.mqtt?.username]);
   useEffect(() => setKeepalive(initial.mqtt?.keepalive ?? 60), [initial.mqtt?.keepalive]);
+  useEffect(() => setSuggestedArea(initial.suggested_area ?? ""), [initial.suggested_area]);
   useEffect(
     () => setDiscoveryPrefix(initial.mqtt?.discovery_prefix ?? "homeassistant"),
     [initial.mqtt?.discovery_prefix],
@@ -604,10 +608,11 @@ function HomeAssistantTile({ cfg, save, busy }: TileProps) {
     port !== (initial.mqtt?.port ?? 1883) ||
     username !== (initial.mqtt?.username ?? "") ||
     keepalive !== (initial.mqtt?.keepalive ?? 60) ||
+    suggestedArea !== (initial.suggested_area ?? "") ||
     discoveryPrefix !== (initial.mqtt?.discovery_prefix ?? "homeassistant");
 
   const submit = () => {
-    const patch: ConfigPatch = { ha: { enabled } };
+    const patch: ConfigPatch = { ha: { enabled, suggested_area: suggestedArea } };
     if (host && username) {
       patch.ha!.mqtt = {
         host,
@@ -665,6 +670,13 @@ function HomeAssistantTile({ cfg, save, busy }: TileProps) {
           max={3600}
           value={keepalive}
           onChange={(e) => setKeepalive(Number(e.target.value))}
+        />
+      </Field>
+      <Field label="Suggested area">
+        <Input
+          value={suggestedArea}
+          onChange={(e) => setSuggestedArea(e.target.value)}
+          placeholder="Living Room"
         />
       </Field>
       <Field label="Discovery prefix">

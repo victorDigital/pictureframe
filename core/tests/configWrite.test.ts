@@ -13,7 +13,7 @@ async function fixture(initial: Record<string, unknown>) {
   return { dir, file };
 }
 
-test("applyConfigPatch updates nested ha.mqtt host without touching other keys", async () => {
+test("applyConfigPatch updates HA settings without touching other keys", async () => {
   const { dir, file } = await fixture({
     device: { name: "f1", bearer_token_file: "/x" },
     ha: {
@@ -22,12 +22,18 @@ test("applyConfigPatch updates nested ha.mqtt host without touching other keys",
     },
     updater: { repo: "a/b" },
   });
-  await applyConfigPatch(file, { ha: { mqtt: { host: "new.local" } } });
+  await applyConfigPatch(file, {
+    ha: { suggested_area: "Living Room", mqtt: { host: "new.local" } },
+  });
   const round = YAML.parse(await fs.readFile(file, "utf8")) as {
-    ha: { mqtt: { host: string; port: number; username: string; password_file: string } };
+    ha: {
+      suggested_area: string;
+      mqtt: { host: string; port: number; username: string; password_file: string };
+    };
     device: { name: string };
     updater: { repo: string };
   };
+  assert.equal(round.ha.suggested_area, "Living Room");
   assert.equal(round.ha.mqtt.host, "new.local");
   assert.equal(round.ha.mqtt.port, 1883);
   assert.equal(round.ha.mqtt.password_file, "/p");

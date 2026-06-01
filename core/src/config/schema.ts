@@ -63,6 +63,7 @@ export const FrameConfigSchema = z
     ha: z
       .object({
         enabled: z.boolean().default(false),
+        suggested_area: z.string().trim().optional(),
         mqtt: z
           .object({
             host: hostnameOrIp,
@@ -128,6 +129,7 @@ export const FrameConfigPatchSchema = z
     ha: z
       .object({
         enabled: z.boolean().optional(),
+        suggested_area: z.string().trim().optional(),
         mqtt: z
           .object({
             host: hostnameOrIp.optional(),

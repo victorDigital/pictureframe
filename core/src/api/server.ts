@@ -445,6 +445,7 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
       },
       ha: {
         enabled: cfg.ha.enabled,
+        suggested_area: cfg.ha.suggested_area ?? "",
         mqtt: cfg.ha.mqtt
           ? {
               host: cfg.ha.mqtt.host,
