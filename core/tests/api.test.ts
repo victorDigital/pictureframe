@@ -125,6 +125,28 @@ test("/api/state requires bearer token", async () => {
   await app.close();
 });
 
+test("POST /api/updates/apply returns accepted after queuing update", async () => {
+  const deps = await makeDeps();
+  const calls: Array<{ force: boolean }> = [];
+  (deps.updater as unknown as {
+    beginApplyAvailable: (opts: { force: boolean }) => { ok: true; accepted: true; tag: string };
+  }).beginApplyAvailable = (opts) => {
+    calls.push(opts);
+    return { ok: true, accepted: true, tag: "v9.9.9" };
+  };
+  const app = await createServer({ ...deps, version: "v0.0.0-test" });
+  const r = await app.inject({
+    method: "POST",
+    url: "/api/updates/apply",
+    headers: { authorization: "Bearer " + "x".repeat(24) },
+  });
+
+  assert.equal(r.statusCode, 202);
+  assert.deepEqual(JSON.parse(r.body), { ok: true, accepted: true, tag: "v9.9.9" });
+  assert.deepEqual(calls, [{ force: false }]);
+  await app.close();
+});
+
 test("PUT /api/screens rejects invalid bodies", async () => {
   const deps = await makeDeps();
   const app = await createServer({ ...deps, version: "v0.0.0-test" });

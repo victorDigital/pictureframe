@@ -55,6 +55,14 @@ send the result to `light.frame_backlight`:
         color_temp_kelvin: "{{ average_kelvin | int }}"
 ```
 
+The frame applies the value through `wlsunset`. Existing devices must have that
+package installed before applying the first release that introduced this
+feature:
+
+```sh
+sudo apt-get update && sudo apt-get install -y wlsunset
+```
+
 The recipes below cover the two integrations that need glue beyond the
 out-of-the-box entities.
 

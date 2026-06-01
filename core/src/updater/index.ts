@@ -175,6 +175,7 @@ export class Updater {
   }
 
   async applyAvailable(opts: { force: boolean }) {
+    if (this.busy) throw new Error("already_applying");
     if (!this.status_.available) throw new Error("no_release_available");
     const cfg = this.store.current.config.updater;
     const wantedTag = this.status_.available.tag;
@@ -185,16 +186,52 @@ export class Updater {
     if (!opts.force && appliedAfter > new Date()) {
       throw new Error(`staging_delay_active until ${appliedAfter.toISOString()}`);
     }
-    const release = await this.gh.latestForChannel(cfg.channel);
-    if (!release || release.tag !== wantedTag) {
-      throw new Error("release_disappeared");
+    this.busy = true;
+    try {
+      const release = await this.gh.latestForChannel(cfg.channel);
+      if (!release || release.tag !== wantedTag) {
+        throw new Error("release_disappeared");
+      }
+      return this.applyTag(release, opts, true);
+    } catch (err) {
+      this.busy = false;
+      throw err;
     }
-    return this.applyTag(release, opts);
   }
 
-  private async applyTag(release: ReleaseInfo, opts: { force: boolean }) {
+  beginApplyAvailable(opts: { force: boolean }) {
     if (this.busy) throw new Error("already_applying");
-    this.busy = true;
+    if (!this.status_.available) throw new Error("no_release_available");
+    const wanted = this.status_.available;
+    if (this.quarantine.has(wanted.tag)) {
+      throw new Error(`quarantined: ${wanted.tag} — clear from /api/updates/quarantine to retry`);
+    }
+    const appliedAfter = new Date(wanted.appliedAfter);
+    if (!opts.force && appliedAfter > new Date()) {
+      throw new Error(`staging_delay_active until ${appliedAfter.toISOString()}`);
+    }
+    void this.applyAvailable(opts).catch((err) => {
+      const detail = String(err);
+      log.error({ err }, "background apply failed");
+      this.status_.lastResult = "failed";
+      this.status_.lastError = detail;
+      this.setPhase("failed", detail, "error");
+      void logUpdaterEvent({
+        level: "error",
+        msg: "background apply failed",
+        tag: wanted.tag,
+        from: this.currentVersion,
+        details: detail,
+      });
+    });
+    return { ok: true, accepted: true, tag: wanted.tag };
+  }
+
+  private async applyTag(release: ReleaseInfo, opts: { force: boolean }, busyLocked = false) {
+    if (!busyLocked) {
+      if (this.busy) throw new Error("already_applying");
+      this.busy = true;
+    }
     const tag = release.tag;
     const from = this.currentVersion;
     log.info({ tag, force: opts.force }, "applying release");
@@ -275,7 +312,13 @@ export class Updater {
         logDir: path.join(paths.stateDir, "migrations"),
       });
       if (!migResult.ok) {
-        throw new Error("migration_failed_or_blocked");
+        const detail =
+          "error" in migResult
+            ? migResult.error
+            : "stopped" in migResult
+              ? `migration_requires_manual_step: ${migResult.stopped.number}-${migResult.stopped.name}`
+              : "migration_failed_or_blocked";
+        throw new Error(detail);
       }
 
       // SPEC §5.2 step 7 / §5.8: pre-flight the staged release on :8081
@@ -323,20 +366,37 @@ export class Updater {
       await logUpdaterEvent({ level: "info", msg: "release applied", tag, from });
       return { ok: true, tag };
     } catch (err) {
-      log.error({ err }, "apply failed");
+      const detail = String(err);
+      const manualBlock = isManualUpdateBlock(detail);
+      if (manualBlock) {
+        log.warn({ err }, "apply blocked");
+      } else {
+        log.error({ err }, "apply failed");
+      }
       this.status_.lastResult = "failed";
-      this.status_.lastError = String(err);
-      this.setPhase("failed", String(err), "error");
-      await this.quarantine.add(tag, String(err).slice(0, 200));
+      this.status_.lastError = detail;
+      this.setPhase(manualBlock ? "blocked" : "failed", detail, manualBlock ? "warn" : "error");
+      if (manualBlock) {
+        this.status_.lastWarning = detail;
+        await logUpdaterEvent({
+          level: "warn",
+          msg: "apply blocked; manual action required",
+          tag,
+          from,
+          details: detail,
+        });
+        return { ok: false, blocked: true, error: detail };
+      }
+      await this.quarantine.add(tag, detail.slice(0, 200));
       this.status_.available = undefined;
       await logUpdaterEvent({
         level: "error",
         msg: "apply failed; quarantined",
         tag,
         from,
-        details: String(err),
+        details: detail,
       });
-      return { ok: false, error: String(err) };
+      return { ok: false, error: detail };
     } finally {
       this.busy = false;
       await fs.rm(tarballPath, { force: true });
@@ -549,4 +609,11 @@ function sameVersion(a: string, b: string): boolean {
 
 function normalizeVersion(version: string): string {
   return version.trim().replace(/^v/i, "");
+}
+
+function isManualUpdateBlock(detail: string): boolean {
+  return (
+    detail.includes("manual_install_required") ||
+    detail.includes("migration_requires_manual_step")
+  );
 }

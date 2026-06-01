@@ -242,6 +242,7 @@ export class HaBridge {
       color_temp_command_topic: "frame/cmd/color_temperature",
       color_temp_command_template: '{"kelvin": {{ value }}}',
       color_temp_state_topic: this.stateTopic("color_temperature"),
+      color_mode_state_topic: this.stateTopic("color_mode"),
       unique_id: `${this.nodeId}_backlight`,
       availability,
       device,
@@ -310,6 +311,9 @@ export class HaBridge {
       retain: true,
     });
     this.client.publish(this.stateTopic("color_temperature"), String(this.colorTemperatureKelvin), {
+      retain: true,
+    });
+    this.client.publish(this.stateTopic("color_mode"), "color_temp", {
       retain: true,
     });
     this.client.publish(this.stateTopic("uptime"), String(Math.round(process.uptime())));

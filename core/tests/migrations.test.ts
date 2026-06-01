@@ -146,3 +146,32 @@ test("wlsunset precondition migration reports the manual install command", async
     },
   );
 });
+
+test("applyPending returns migration failure details", async () => {
+  const dir = await mkTempDir("frame-mig-");
+  await fs.writeFile(
+    path.join(dir, "0001_needs_tool.sh"),
+    "#!/usr/bin/env bash\necho 'manual_install_required: install thing' >&2\nexit 1\n",
+  );
+  const migrations = await discoverMigrations(dir);
+  const history = { applied: [] };
+  const previousStateDir = process.env.FRAME_STATE_DIR;
+  process.env.FRAME_STATE_DIR = dir;
+
+  try {
+    const result = await applyPending({
+      history,
+      migrations,
+      historyFile: path.join(dir, "_history.json"),
+      configPath: path.join(dir, "frame.yaml"),
+      logDir: path.join(dir, "_logs"),
+    });
+
+    assert.equal(result.ok, false);
+    assert.match("error" in result ? result.error : "", /manual_install_required: install thing/);
+  } finally {
+    if (previousStateDir === undefined) delete process.env.FRAME_STATE_DIR;
+    else process.env.FRAME_STATE_DIR = previousStateDir;
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});

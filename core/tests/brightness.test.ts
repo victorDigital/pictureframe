@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { EventEmitter } from "node:events";
 import { Brightness } from "../src/system/brightness.js";
 import {
   DisplayController,
@@ -221,6 +222,40 @@ test("colorTemperature requires wlsunset for warm values", async () => {
     );
 
     await assert.rejects(() => display.colorTemperature(4000), new RegExp(WLSUNSET_MISSING_ERROR));
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("colorTemperature rejects when wlsunset exits during startup", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "frame-color-"));
+  try {
+    const pidFile = path.join(tmp, "wlsunset.pid");
+    const display = new DisplayController(
+      config({}),
+      async (file, args = []) => {
+        if (file === "sh" && args[1]?.includes("wlsunset")) {
+          return { stdout: "/usr/bin/wlsunset\n", stderr: "" };
+        }
+        throw new Error(`unexpected command: ${file} ${args.join(" ")}`);
+      },
+      () => {
+        const child = new EventEmitter() as ChildProcess;
+        child.pid = 999_999_993;
+        child.exitCode = null;
+        child.unref = () => child;
+        queueMicrotask(() => child.emit("exit", 1, null));
+        return child;
+      },
+      pidFile,
+      20,
+    );
+
+    await assert.rejects(
+      () => display.colorTemperature(4000),
+      /color_temperature_start_failed: wlsunset exited 1/,
+    );
+    await assert.rejects(() => fs.access(pidFile), /ENOENT/);
   } finally {
     await fs.rm(tmp, { recursive: true, force: true });
   }

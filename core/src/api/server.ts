@@ -1,4 +1,4 @@
-import Fastify, { FastifyInstance, FastifyRequest } from "fastify";
+import Fastify, { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
 import WebSocket from "ws";
@@ -258,17 +258,18 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
 
   app.get("/api/updates", async () => deps.updater.status());
   app.post("/api/updates/check", async () => deps.updater.checkNow());
-  app.post("/api/updates/apply", async (_req, reply) => {
+  const beginUpdateApply = async (reply: FastifyReply, force: boolean) => {
     try {
-      return await deps.updater.applyAvailable({ force: false });
+      const result = deps.updater.beginApplyAvailable({ force });
+      reply.code(202);
+      return result;
     } catch (err) {
       reply.code(409);
       return { error: String(err) };
     }
-  });
-  app.post("/api/updates/apply_force", async () =>
-    deps.updater.applyAvailable({ force: true }),
-  );
+  };
+  app.post("/api/updates/apply", async (_req, reply) => beginUpdateApply(reply, false));
+  app.post("/api/updates/apply_force", async (_req, reply) => beginUpdateApply(reply, true));
   app.post("/api/updates/rollback", async () => deps.updater.rollback());
 
   app.get("/api/updates/quarantine", async () => ({

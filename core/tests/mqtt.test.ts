@@ -118,6 +118,7 @@ test("HA discovery exposes backlight as a light with suggested area", async () =
   assert.equal(payload.color_temp_command_topic, "frame/cmd/color_temperature");
   assert.equal(payload.color_temp_command_template, '{"kelvin": {{ value }}}');
   assert.equal(payload.color_temp_state_topic, "frame/living-room-frame/color_temperature");
+  assert.equal(payload.color_mode_state_topic, "frame/living-room-frame/color_mode");
   assert.equal(payload.payload_on, "on");
   assert.equal(payload.payload_off, "off");
   assert.equal(payload.device.suggested_area, "Living Room");
@@ -152,6 +153,10 @@ test("HA color temperature commands publish clamped Kelvin state", async () => {
     published.filter((p) => p.topic === "frame/living-room-frame/color_temperature").at(-1)
       ?.payload,
     "6535",
+  );
+  assert.equal(
+    published.filter((p) => p.topic === "frame/living-room-frame/color_mode").at(-1)?.payload,
+    "color_temp",
   );
   assert.equal(
     published.filter((p) => p.topic === "frame/living-room-frame/brightness").at(-1)?.payload,

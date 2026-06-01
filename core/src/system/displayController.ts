@@ -36,6 +36,7 @@ export class DisplayController {
     private run: CommandRunner = defaultCommandRunner,
     private spawnProcess: ProcessSpawner = defaultProcessSpawner,
     private colorTemperaturePidFile = path.join(paths.runtimeDir, "wlsunset.pid"),
+    private colorTemperatureStartupMs = 500,
   ) {}
 
   updateConfig(cfg: FrameConfig) {
@@ -122,6 +123,7 @@ export class DisplayController {
       { env },
     );
     if (!child.pid) throw new Error("color_temperature_start_failed: wlsunset did not report a pid");
+    await waitForProcessStartup(child, "wlsunset", this.colorTemperatureStartupMs);
     child.unref();
     await fs.writeFile(
       this.colorTemperaturePidFile,
@@ -140,6 +142,14 @@ export class DisplayController {
         process.kill(entry.pid, "SIGTERM");
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code !== "ESRCH") throw err;
+      }
+      if (!(await waitForPidExit(entry.pid, 1000)) && (await pidLooksLikeWlsunset(entry.pid, entry.command))) {
+        try {
+          process.kill(entry.pid, "SIGKILL");
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== "ESRCH") throw err;
+        }
+        await waitForPidExit(entry.pid, 1000);
       }
     }
     await fs.rm(this.colorTemperaturePidFile, { force: true });
@@ -184,6 +194,46 @@ function pidRunning(pid: number): boolean {
   } catch (err) {
     return (err as NodeJS.ErrnoException).code === "EPERM";
   }
+}
+
+async function waitForPidExit(pid: number, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!pidRunning(pid)) return true;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return !pidRunning(pid);
+}
+
+async function waitForProcessStartup(
+  child: ChildProcess,
+  command: string,
+  timeoutMs = 500,
+): Promise<void> {
+  if (typeof child.once !== "function") return;
+  if (child.exitCode !== null) {
+    throw new Error(`color_temperature_start_failed: ${command} exited before startup`);
+  }
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(done, timeoutMs);
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) =>
+      done(
+        new Error(
+          `color_temperature_start_failed: ${command} exited ${code ?? "?"}${signal ? ` (${signal})` : ""}`,
+        ),
+      );
+    const onError = (err: Error) =>
+      done(new Error(`color_temperature_start_failed: ${command}: ${err.message}`));
+    function done(err?: Error) {
+      clearTimeout(timer);
+      child.off?.("exit", onExit);
+      child.off?.("error", onError);
+      if (err) reject(err);
+      else resolve();
+    }
+    child.once("exit", onExit);
+    child.once("error", onError);
+  });
 }
 
 async function pidLooksLikeWlsunset(pid: number, command?: string): Promise<boolean> {

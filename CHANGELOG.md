@@ -5,6 +5,20 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.24] - 2026-06-02
+
+### Fixed
+
+- Home Assistant backlight discovery now publishes an explicit retained
+  `color_mode` state so `light.frame_backlight` reliably accepts Kelvin color
+  temperature commands after HA/device restarts.
+- Display color-temperature changes now fail visibly when `wlsunset` exits
+  during startup instead of retaining a state value that was never applied.
+- Update apply requests now return immediately after queueing the update, so
+  the web UI is not broken by the intentional frame-core restart during apply.
+- Manual update precondition failures now keep the release retryable and
+  surface the exact manual install command instead of quarantining the tag.
+
 ## [0.0.23] - 2026-06-02
 
 ### Added

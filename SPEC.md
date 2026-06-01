@@ -300,7 +300,7 @@ frame ALL=(root) NOPASSWD: /usr/local/lib/frame/root-helper install-packages /ru
 
 Releases declare required Debian/Ubuntu packages in `deploy/os-packages.txt`. The updater reads that manifest from the staged release, checks what is missing, writes `/run/frame/os-packages.required`, and invokes `root-helper install-packages`. The helper validates every requested package against its fixed allowlist before running apt and can temporarily remount apt/dpkg bind mounts read-write when frame-core's systemd sandbox exposes them read-only.
 
-Migrations that require operator judgment rather than a package from the allowlist still mark themselves with `requires_manual_step: true`. The updater stops at such migrations and surfaces the manual step in the UI.
+Migrations that require operator judgment rather than a package from the allowlist still mark themselves with `requires_manual_step: true`. The updater stops at such migrations and surfaces the manual step in the UI. Manual install precondition failures remain retryable; they do not quarantine the release.
 
 Brightness control does not go through sudo (see §10).
 
@@ -311,7 +311,7 @@ Rollback restores both code and config:
 1. Symlink `current` flips back to the previous release
 2. Config files (`frame.yaml`, `screens.yaml`, `migrations.json`) restored from `/opt/frame/snapshots/<from>--<to>/`
 3. `root-helper restart-core`
-4. The failed release is quarantined; updater won't re-attempt it
+4. The failed release is quarantined unless the failure is a retryable manual precondition
 5. Last 3 successful releases retained; older pruned with their snapshots
 
 **Secrets are deliberately excluded from snapshots.** They live in `/etc/frame/secrets/` and are referenced from `frame.yaml` by file path (see `bearer_token_file`, `password_file`, etc. in §9.1). This means rolling back does not undo a secret rotation — a deliberate trade-off: keeping historical copies of bearer tokens, MQTT passwords, and VNC passwords on disk for the lifetime of three update cycles is a worse problem than losing the ability to revert a credential rotation by rollback. If a rotation needs to be reverted, that's a manual operation via SSH (rewrite the file).
@@ -407,6 +407,10 @@ MQTT command topics:
 - `frame/cmd/color_temperature` `{"kelvin": 4000}`
 - `frame/cmd/update_now` — respects staging delay
 - `frame/cmd/update_now_force` — overrides staging delay
+
+`light.frame_backlight` publishes retained Kelvin color-temperature state and
+`color_temp` color mode state so Home Assistant can restore the entity as a
+color-temperature-capable light after reconnects.
 
 ### 6.4 Example HA automations
 
