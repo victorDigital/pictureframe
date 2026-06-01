@@ -4,6 +4,10 @@ import { FrameConfig, Screen } from "../config/schema.js";
 import { Scheduler } from "../scheduler/index.js";
 import { Updater } from "../updater/index.js";
 import { Brightness } from "../system/brightness.js";
+import {
+  MAX_COLOR_TEMPERATURE_KELVIN,
+  MIN_COLOR_TEMPERATURE_KELVIN,
+} from "../system/displayController.js";
 import { sub } from "../util/logger.js";
 
 const log = sub("mqtt");
@@ -17,6 +21,7 @@ export class HaBridge {
   private discoveryPrefix: string;
   private nodeId: string;
   private displayPowerState: "on" | "off" = "on";
+  private colorTemperatureKelvin = MAX_COLOR_TEMPERATURE_KELVIN;
 
   constructor(
     private cfg: FrameConfig,
@@ -231,6 +236,12 @@ export class HaBridge {
       brightness_command_template: '{"value": {{ value }}}',
       brightness_state_topic: this.stateTopic("brightness"),
       brightness_scale: 100,
+      color_temp_kelvin: true,
+      min_kelvin: MIN_COLOR_TEMPERATURE_KELVIN,
+      max_kelvin: MAX_COLOR_TEMPERATURE_KELVIN,
+      color_temp_command_topic: "frame/cmd/color_temperature",
+      color_temp_command_template: '{"kelvin": {{ value }}}',
+      color_temp_state_topic: this.stateTopic("color_temperature"),
       unique_id: `${this.nodeId}_backlight`,
       availability,
       device,
@@ -298,6 +309,9 @@ export class HaBridge {
     this.client.publish(this.stateTopic("display_power"), this.displayPowerState, {
       retain: true,
     });
+    this.client.publish(this.stateTopic("color_temperature"), String(this.colorTemperatureKelvin), {
+      retain: true,
+    });
     this.client.publish(this.stateTopic("uptime"), String(Math.round(process.uptime())));
     try {
       const b = await this.brightness.read();
@@ -346,6 +360,18 @@ export class HaBridge {
         const s = String(body.state ?? raw).trim().toLowerCase() === "off" ? "off" : "on";
         await this.brightness.displayPower(s);
         this.displayPowerState = s;
+        break;
+      }
+      case "color_temperature": {
+        const value =
+          typeof body.kelvin === "number"
+            ? body.kelvin
+            : typeof body.color_temp_kelvin === "number"
+              ? body.color_temp_kelvin
+              : Number(raw);
+        if (Number.isFinite(value)) {
+          this.colorTemperatureKelvin = await this.brightness.colorTemperature(value);
+        }
         break;
       }
       case "reboot":

@@ -1,8 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { Brightness } from "../src/system/brightness.js";
-import { parseWlrOutputs } from "../src/system/displayController.js";
+import {
+  DisplayController,
+  parseWlrOutputs,
+  WLSUNSET_MISSING_ERROR,
+} from "../src/system/displayController.js";
 import type { FrameConfig } from "../src/config/schema.js";
+import type { ChildProcess } from "node:child_process";
 
 function config(display: Partial<FrameConfig["display"]>): FrameConfig {
   return {
@@ -140,4 +148,80 @@ test("parseWlrOutputs ignores indented mode lines", () => {
     parseWlrOutputs("eDP-1 enabled\n  1920x1080 px\n\nHDMI-A-1 enabled\n  1280x720 px\n"),
     ["eDP-1", "HDMI-A-1"],
   );
+});
+
+test("colorTemperature starts wlsunset with clamped warm Kelvin", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "frame-color-"));
+  try {
+    const pidFile = path.join(tmp, "wlsunset.pid");
+    const spawned: Array<{ file: string; args: string[] }> = [];
+    const display = new DisplayController(
+      config({}),
+      async (file, args = []) => {
+        if (file === "sh" && args[1]?.includes("wlsunset")) {
+          return { stdout: "/usr/bin/wlsunset\n", stderr: "" };
+        }
+        throw new Error(`unexpected command: ${file} ${args.join(" ")}`);
+      },
+      (file, args = []) => {
+        spawned.push({ file, args });
+        return { pid: 999_999_991, unref: () => undefined } as unknown as ChildProcess;
+      },
+      pidFile,
+    );
+
+    assert.equal(await display.colorTemperature(1800), 2000);
+    assert.deepEqual(spawned, [
+      { file: "wlsunset", args: ["-l", "0", "-L", "0", "-t", "2000", "-T", "2000"] },
+    ]);
+    const pid = JSON.parse(await fs.readFile(pidFile, "utf8")) as { pid: number; command: string };
+    assert.equal(pid.pid, 999_999_991);
+    assert.equal(pid.command, "wlsunset");
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("colorTemperature treats neutral Kelvin as reset and cleans stale PID", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "frame-color-"));
+  try {
+    const pidFile = path.join(tmp, "wlsunset.pid");
+    await fs.writeFile(pidFile, JSON.stringify({ pid: 999_999_992, command: "wlsunset" }));
+    const display = new DisplayController(
+      config({}),
+      async () => {
+        throw new Error("unexpected command");
+      },
+      () => {
+        throw new Error("unexpected spawn");
+      },
+      pidFile,
+    );
+
+    assert.equal(await display.colorTemperature(6535), 6535);
+    await assert.rejects(() => fs.access(pidFile), /ENOENT/);
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("colorTemperature requires wlsunset for warm values", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "frame-color-"));
+  try {
+    const display = new DisplayController(
+      config({}),
+      async (file, args = []) => {
+        if (file === "sh" && args[1]?.includes("wlsunset")) throw new Error("missing");
+        throw new Error(`unexpected command: ${file} ${args.join(" ")}`);
+      },
+      () => {
+        throw new Error("unexpected spawn");
+      },
+      path.join(tmp, "wlsunset.pid"),
+    );
+
+    await assert.rejects(() => display.colorTemperature(4000), new RegExp(WLSUNSET_MISSING_ERROR));
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
 });

@@ -107,8 +107,8 @@ Auto-discovery is published when `ha.enabled: true`. Without any further
 config you get:
 
 - `select.frame_current_screen` — bound to the screen list
-- `light.frame_backlight` — display on/off plus brightness, usable in HA
-  areas and light groups
+- `light.frame_backlight` — display on/off plus brightness and color
+  temperature, usable in HA areas and light groups
 - `number.frame_brightness`, `switch.frame_display_power`
 - `button.frame_reboot`, `button.frame_update_now`, `button.frame_update_now_force`
 - `sensor.frame_active_screen`, `sensor.frame_uptime`, `sensor.frame_version`,

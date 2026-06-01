@@ -138,6 +138,7 @@ BASE_PACKAGES=(
   jq
   ddcutil
   wlr-randr
+  wlsunset
   websockify
   novnc
   avahi-daemon

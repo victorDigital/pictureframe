@@ -100,6 +100,10 @@ export class Brightness {
     return this.display.power(state);
   }
 
+  async colorTemperature(kelvin: number): Promise<number> {
+    return this.display.colorTemperature(kelvin);
+  }
+
   async applyDisplayConfig(): Promise<boolean> {
     return this.display.applyConfig();
   }

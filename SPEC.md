@@ -382,7 +382,7 @@ MQTT with HA's discovery mechanism. frame-core publishes discovery messages on `
 | Entity                              | Type    | Notes                                  |
 |-------------------------------------|---------|----------------------------------------|
 | `select.frame_current_screen`       | select  | Options populated from screen list     |
-| `light.frame_backlight`             | light   | Display on/off + brightness, area-aware |
+| `light.frame_backlight`             | light   | Display on/off + brightness/color temp |
 | `number.frame_brightness`           | number  | 0–100                                  |
 | `switch.frame_display_power`        | switch  | DPMS off/on                            |
 | `button.frame_reboot`               | button  | Safe reboot                            |
@@ -404,6 +404,7 @@ MQTT command topics:
 - `frame/cmd/set_default` `{"id": "clock"}`
 - `frame/cmd/brightness` `{"value": 30}`
 - `frame/cmd/display_power` `{"state": "off"}`
+- `frame/cmd/color_temperature` `{"kelvin": 4000}`
 - `frame/cmd/update_now` — respects staging delay
 - `frame/cmd/update_now_force` — overrides staging delay
 

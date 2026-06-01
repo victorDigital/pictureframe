@@ -12,6 +12,7 @@ PACKAGE_ALLOWLIST=(
   ddcutil
   cage
   chromium
+  wlsunset
 )
 
 REMOUNTED_TARGETS=()

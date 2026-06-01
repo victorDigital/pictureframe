@@ -63,9 +63,11 @@ function bridge() {
   } as unknown as Updater;
   const writes: number[] = [];
   const power: Array<"on" | "off"> = [];
+  const temperatures: number[] = [];
   const brightness = {
     writes,
     power,
+    temperatures,
     read: async () => 42,
     write: async (value: number) => {
       writes.push(value);
@@ -74,8 +76,16 @@ function bridge() {
       power.push(state);
       return { ok: true };
     },
+    colorTemperature: async (kelvin: number) => {
+      temperatures.push(kelvin);
+      return Math.max(2000, Math.min(6535, Math.round(kelvin)));
+    },
     scheduleReboot: async () => ({ ok: true }),
-  } as unknown as Brightness & { writes: number[]; power: Array<"on" | "off"> };
+  } as unknown as Brightness & {
+    writes: number[];
+    power: Array<"on" | "off">;
+    temperatures: number[];
+  };
   const ha = new HaBridge(config(), scheduler, updater, brightness);
   const published: Array<{ topic: string; payload: string; opts?: unknown }> = [];
   const client = {
@@ -102,6 +112,12 @@ test("HA discovery exposes backlight as a light with suggested area", async () =
   assert.equal(payload.brightness_command_topic, "frame/cmd/brightness");
   assert.equal(payload.brightness_state_topic, "frame/living-room-frame/brightness");
   assert.equal(payload.brightness_scale, 100);
+  assert.equal(payload.color_temp_kelvin, true);
+  assert.equal(payload.min_kelvin, 2000);
+  assert.equal(payload.max_kelvin, 6535);
+  assert.equal(payload.color_temp_command_topic, "frame/cmd/color_temperature");
+  assert.equal(payload.color_temp_command_template, '{"kelvin": {{ value }}}');
+  assert.equal(payload.color_temp_state_topic, "frame/living-room-frame/color_temperature");
   assert.equal(payload.payload_on, "on");
   assert.equal(payload.payload_off, "off");
   assert.equal(payload.device.suggested_area, "Living Room");
@@ -120,5 +136,29 @@ test("HA light commands set display power and brightness", async () => {
   assert.equal(
     published.filter((p) => p.topic === "frame/living-room-frame/display_power").at(-1)?.payload,
     "off",
+  );
+});
+
+test("HA color temperature commands publish clamped Kelvin state", async () => {
+  const { ha, published, brightness } = bridge();
+  const handleCommand = (ha as unknown as {
+    handleCommand: (topic: string, raw: string) => Promise<void>;
+  }).handleCommand.bind(ha);
+  await handleCommand("frame/cmd/color_temperature", '{"kelvin": 1800}');
+  await handleCommand("frame/cmd/color_temperature", "7000");
+
+  assert.deepEqual(brightness.temperatures, [1800, 7000]);
+  assert.equal(
+    published.filter((p) => p.topic === "frame/living-room-frame/color_temperature").at(-1)
+      ?.payload,
+    "6535",
+  );
+  assert.equal(
+    published.filter((p) => p.topic === "frame/living-room-frame/brightness").at(-1)?.payload,
+    "42",
+  );
+  assert.equal(
+    published.filter((p) => p.topic === "frame/living-room-frame/display_power").at(-1)?.payload,
+    "on",
   );
 });

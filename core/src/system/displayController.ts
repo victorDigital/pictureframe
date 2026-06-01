@@ -1,9 +1,12 @@
-import { execFile } from "node:child_process";
-import type { ExecFileOptions } from "node:child_process";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { execFile, spawn } from "node:child_process";
+import type { ChildProcess, ExecFileOptions, SpawnOptions } from "node:child_process";
 import { promisify } from "node:util";
 import type { FrameConfig } from "../config/schema.js";
 import { sub } from "../util/logger.js";
 import { wlSessionEnv } from "./wayland.js";
+import { paths } from "../util/paths.js";
 
 export type CommandRunner = (
   file: string,
@@ -12,12 +15,27 @@ export type CommandRunner = (
 ) => Promise<{ stdout: string; stderr: string }>;
 
 export const defaultCommandRunner = promisify(execFile) as CommandRunner;
+export type ProcessSpawner = (
+  file: string,
+  args?: string[],
+  options?: SpawnOptions,
+) => ChildProcess;
+
+export const defaultProcessSpawner: ProcessSpawner = (file, args = [], options = {}) =>
+  spawn(file, args, { ...options, detached: true, stdio: "ignore" });
+
 const log = sub("display");
+export const MIN_COLOR_TEMPERATURE_KELVIN = 2000;
+export const MAX_COLOR_TEMPERATURE_KELVIN = 6535;
+export const WLSUNSET_MISSING_ERROR =
+  "wlsunset_missing_manual_install_required: sudo apt-get update && sudo apt-get install -y wlsunset";
 
 export class DisplayController {
   constructor(
     private cfg: FrameConfig,
     private run: CommandRunner = defaultCommandRunner,
+    private spawnProcess: ProcessSpawner = defaultProcessSpawner,
+    private colorTemperaturePidFile = path.join(paths.runtimeDir, "wlsunset.pid"),
   ) {}
 
   updateConfig(cfg: FrameConfig) {
@@ -84,6 +102,98 @@ export class DisplayController {
     );
     log.info({ scale, orientation, outputs }, "display geometry applied");
     return true;
+  }
+
+  async colorTemperature(kelvin: number): Promise<number> {
+    const clamped = clampColorTemperatureKelvin(kelvin);
+    if (clamped === MAX_COLOR_TEMPERATURE_KELVIN) {
+      await this.stopColorTemperature();
+      return clamped;
+    }
+    if (!(await commandExists("wlsunset", this.run))) {
+      throw new Error(WLSUNSET_MISSING_ERROR);
+    }
+    await this.stopColorTemperature();
+    await fs.mkdir(path.dirname(this.colorTemperaturePidFile), { recursive: true });
+    const env = { ...process.env, ...(await wlSessionEnv()) };
+    const child = this.spawnProcess(
+      "wlsunset",
+      ["-l", "0", "-L", "0", "-t", String(clamped), "-T", String(clamped)],
+      { env },
+    );
+    if (!child.pid) throw new Error("color_temperature_start_failed: wlsunset did not report a pid");
+    child.unref();
+    await fs.writeFile(
+      this.colorTemperaturePidFile,
+      JSON.stringify({ pid: child.pid, command: "wlsunset" }) + "\n",
+    );
+    log.info({ kelvin: clamped, pid: child.pid }, "color temperature set");
+    return clamped;
+  }
+
+  private async stopColorTemperature() {
+    const entry = await this.readColorTemperaturePid();
+    if (!entry) return;
+    const running = pidRunning(entry.pid);
+    if (running && (await pidLooksLikeWlsunset(entry.pid, entry.command))) {
+      try {
+        process.kill(entry.pid, "SIGTERM");
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "ESRCH") throw err;
+      }
+    }
+    await fs.rm(this.colorTemperaturePidFile, { force: true });
+  }
+
+  private async readColorTemperaturePid(): Promise<{ pid: number; command?: string } | undefined> {
+    let raw: string;
+    try {
+      raw = await fs.readFile(this.colorTemperaturePidFile, "utf8");
+    } catch {
+      return undefined;
+    }
+    try {
+      const parsed = JSON.parse(raw) as { pid?: unknown; command?: unknown };
+      if (typeof parsed.pid === "number" && Number.isInteger(parsed.pid) && parsed.pid > 0) {
+        return {
+          pid: parsed.pid,
+          command: typeof parsed.command === "string" ? parsed.command : undefined,
+        };
+      }
+    } catch {
+      const pid = Number(raw.trim());
+      if (Number.isInteger(pid) && pid > 0) return { pid };
+    }
+    await fs.rm(this.colorTemperaturePidFile, { force: true });
+    return undefined;
+  }
+}
+
+export function clampColorTemperatureKelvin(kelvin: number): number {
+  if (!Number.isFinite(kelvin)) return MAX_COLOR_TEMPERATURE_KELVIN;
+  return Math.max(
+    MIN_COLOR_TEMPERATURE_KELVIN,
+    Math.min(MAX_COLOR_TEMPERATURE_KELVIN, Math.round(kelvin)),
+  );
+}
+
+function pidRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+async function pidLooksLikeWlsunset(pid: number, command?: string): Promise<boolean> {
+  if (command && command !== "wlsunset") return false;
+  if (process.platform !== "linux") return true;
+  try {
+    const cmdline = await fs.readFile(`/proc/${pid}/cmdline`, "utf8");
+    return cmdline.includes("wlsunset");
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code !== "ENOENT";
   }
 }
 

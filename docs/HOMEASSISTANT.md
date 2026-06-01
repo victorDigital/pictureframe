@@ -12,6 +12,49 @@ Set `ha.suggested_area` in `frame.yaml` to the HA room name where the frame
 belongs. MQTT discovery publishes that as the device's area hint when Home
 Assistant first creates the device.
 
+## Match room color temperature
+
+The frame does not query Home Assistant. Let HA calculate the room average and
+send the result to `light.frame_backlight`:
+
+```yaml
+- alias: "Frame: match living room color temperature"
+  mode: restart
+  trigger:
+    - platform: event
+      event_type: state_changed
+  variables:
+    room_area: Living Room
+    frame_light: light.frame_backlight
+    average_kelvin: >-
+      {% set ns = namespace(values=[]) %}
+      {% for entity in area_entities(room_area) %}
+        {% if entity.startswith('light.') and entity != frame_light and is_state(entity, 'on') %}
+          {% set kelvin = state_attr(entity, 'color_temp_kelvin') %}
+          {% if kelvin is number %}
+            {% set ns.values = ns.values + [kelvin | float] %}
+          {% endif %}
+        {% endif %}
+      {% endfor %}
+      {% if ns.values | count > 0 %}
+        {{ (ns.values | sum / (ns.values | count)) | round(0) }}
+      {% else %}
+        0
+      {% endif %}
+  condition:
+    - condition: template
+      value_template: >-
+        {{ trigger.event.data.entity_id in area_entities(room_area)
+           and trigger.event.data.entity_id != frame_light
+           and trigger.event.data.entity_id.startswith('light.')
+           and average_kelvin | int(0) > 0 }}
+  action:
+    - service: light.turn_on
+      data:
+        entity_id: "{{ frame_light }}"
+        color_temp_kelvin: "{{ average_kelvin | int }}"
+```
+
 The recipes below cover the two integrations that need glue beyond the
 out-of-the-box entities.
 

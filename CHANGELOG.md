@@ -5,6 +5,16 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.23] - 2026-06-02
+
+### Added
+
+- Home Assistant can now set `light.frame_backlight` color temperature in
+  Kelvin, with frame-core applying the value through `wlsunset` Wayland gamma
+  control.
+- Fresh installs now include `wlsunset`; existing devices block update
+  application with a manual install message until the operator installs it.
+
 ## [0.0.22] - 2026-06-01
 
 ### Added

@@ -4,11 +4,16 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import {
   applyPending,
   discoverMigrations,
   verifyHistoryIntegrity,
 } from "../src/updater/migrations.js";
+
+const exec = promisify(execFile);
 
 async function mkTempDir(prefix: string) {
   return await fs.mkdtemp(path.join(os.tmpdir(), prefix));
@@ -125,4 +130,19 @@ test("verifyHistoryIntegrity fails when a previously-applied migration is missin
   if (!result.ok) assert.match(result.reason, /missing/);
 
   await fs.rm(dir, { recursive: true, force: true });
+});
+
+test("wlsunset precondition migration reports the manual install command", async () => {
+  const migration = fileURLToPath(new URL("../../migrations/0002_wlsunset_precondition.sh", import.meta.url));
+  await assert.rejects(
+    () => exec("/bin/bash", [migration], { env: { PATH: "/tmp/frame-no-wlsunset" } }),
+    (err: unknown) => {
+      const detail = String((err as { stderr?: unknown }).stderr ?? err);
+      assert.match(
+        detail,
+        /wlsunset_missing_manual_install_required: sudo apt-get update && sudo apt-get install -y wlsunset/,
+      );
+      return true;
+    },
+  );
 });
