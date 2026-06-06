@@ -5,6 +5,14 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.25] - 2026-06-06
+
+### Changed
+
+- Reworked the clock built-in's analog face as a smooth full-screen canvas
+  renderer with edge-to-edge geometry, refined tick marks, shaped hands, and a
+  fading second-hand trail.
+
 ## [0.0.24] - 2026-06-02
 
 ### Fixed

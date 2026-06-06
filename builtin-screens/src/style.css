@@ -191,18 +191,18 @@ body {
   animation: flip-tick 0.35s ease-out;
 }
 
-.analog-face {
-  width: min(72vmin, calc(42rem * var(--font-scale, 1)));
-  height: min(72vmin, calc(42rem * var(--font-scale, 1)));
+.analog-shell {
+  position: relative;
+  background: #000;
 }
 
-.analog-hand {
-  transform-origin: 50% 100%;
-  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.analog-hand-second {
-  transition: none;
+.analog-canvas {
+  position: fixed;
+  inset: 0;
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  background: #000;
 }
 
 .alert-label {
