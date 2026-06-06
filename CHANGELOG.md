@@ -5,6 +5,14 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.30] - 2026-06-06
+
+### Fixed
+
+- Made now-playing treat Music Assistant payloads with live media metadata as
+  active even when Home Assistant reports a stale inactive player state, and
+  added support for `music_assistant.get_queue` response payloads.
+
 ## [0.0.29] - 2026-06-06
 
 ### Changed

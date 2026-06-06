@@ -28,7 +28,9 @@ export function setNowPlaying(input: unknown, opts: NormalizeOptions = {}) {
 
 export function normalizeNowPlaying(input: unknown, opts: NormalizeOptions = {}): NowPlaying | null {
   if (input == null) return null;
-  const source = unwrapHomeAssistantState(parseStructuredString(input));
+  const source = unwrapMusicAssistantQueueResponse(
+    unwrapHomeAssistantState(parseStructuredString(input)),
+  );
   if (source == null) return null;
   if (typeof source === "string") {
     const state = normalizeState(source);
@@ -37,12 +39,49 @@ export function normalizeNowPlaying(input: unknown, opts: NormalizeOptions = {})
   if (!isRecord(source)) return null;
 
   const attrs = isRecord(source.attributes) ? source.attributes : {};
+  const queueItem = isRecord(source.current_item) ? source.current_item : undefined;
+  const mediaItem = isRecord(queueItem?.media_item) ? queueItem.media_item : undefined;
+  const streamTitle = firstString(
+    queueItem?.stream_title,
+    mediaItem?.stream_title,
+    source.stream_title,
+    attrs.stream_title,
+  );
+  const streamParts = splitStreamTitle(streamTitle);
   const state = normalizeState(source.state) ?? normalizeState(attrs.state);
-  const title = firstString(source.title, attrs.media_title, attrs.title, attrs.media_name, attrs.name);
-  const artist = firstString(source.artist, attrs.media_artist, attrs.artist, attrs.media_album_artist);
-  const album = firstString(source.album, attrs.media_album_name, attrs.media_album, attrs.album);
-  const duration = firstNumber(source.duration, attrs.media_duration, attrs.duration);
-  const position = firstNumber(source.position, attrs.media_position, attrs.position);
+  const title = firstString(
+    source.title,
+    attrs.media_title,
+    attrs.title,
+    attrs.media_name,
+    streamParts?.title,
+    mediaItem?.name,
+    queueItem?.name,
+    attrs.name,
+  );
+  const artist = firstString(
+    source.artist,
+    attrs.media_artist,
+    attrs.artist,
+    streamParts?.artist,
+    namesFromItems(mediaItem?.artists),
+    attrs.media_album_artist,
+  );
+  const album = firstString(
+    source.album,
+    attrs.media_album_name,
+    attrs.media_album,
+    attrs.album,
+    isRecord(mediaItem?.album) ? mediaItem.album.name : undefined,
+  );
+  const duration = firstNumber(source.duration, attrs.media_duration, attrs.duration, queueItem?.duration);
+  const position = firstNumber(
+    source.position,
+    attrs.media_position,
+    attrs.position,
+    source.elapsed_time,
+    attrs.elapsed_time,
+  );
   const positionUpdatedAt = firstString(
     source.position_updated_at,
     attrs.media_position_updated_at,
@@ -60,11 +99,17 @@ export function normalizeNowPlaying(input: unknown, opts: NormalizeOptions = {})
     attrs.thumbnail,
     source.image,
     attrs.image,
+    queueItem?.image,
+    mediaItem?.image,
     source.picture,
     source.art_url,
     source.album_art_url,
   );
-  const resolvedState = state ?? (title || artist || album || picture ? "playing" : undefined);
+  const hasMedia = Boolean(title || artist || album || picture);
+  const resolvedState =
+    state && shouldTrustMusicAssistantMetadata(source, attrs, state, hasMedia)
+      ? "playing"
+      : (state ?? (hasMedia ? "playing" : undefined));
   if (!resolvedState) return null;
 
   return {
@@ -96,6 +141,16 @@ function unwrapHomeAssistantState(input: unknown): unknown {
   return input;
 }
 
+function unwrapMusicAssistantQueueResponse(input: unknown): unknown {
+  if (!isRecord(input) || "state" in input || "attributes" in input || "current_item" in input) {
+    return input;
+  }
+  const values = Object.values(input);
+  if (values.length !== 1 || !isRecord(values[0])) return input;
+  const value = values[0];
+  return "current_item" in value && ("queue_id" in value || "elapsed_time" in value) ? value : input;
+}
+
 function parseStructuredString(input: unknown): unknown {
   if (typeof input !== "string") return input;
   const trimmed = input.trim();
@@ -123,6 +178,13 @@ function firstString(...values: unknown[]) {
   return undefined;
 }
 
+function namesFromItems(value: unknown) {
+  if (!Array.isArray(value)) return undefined;
+  return value
+    .map((item) => (isRecord(item) ? cleanString(item.name) : cleanString(item)))
+    .filter(Boolean);
+}
+
 function cleanString(value: unknown) {
   if (typeof value !== "string" && typeof value !== "number") return undefined;
   if (typeof value === "number" && !Number.isFinite(value)) return undefined;
@@ -144,6 +206,25 @@ function firstNumber(...values: unknown[]) {
     if (Number.isFinite(n)) return n;
   }
   return undefined;
+}
+
+function splitStreamTitle(value: string | undefined) {
+  if (!value?.includes(" - ")) return undefined;
+  const [artist, title] = value.split(" - ", 2).map((part) => cleanString(part));
+  return artist || title ? { artist, title } : undefined;
+}
+
+function shouldTrustMusicAssistantMetadata(
+  source: Record<string, unknown>,
+  attrs: Record<string, unknown>,
+  state: string,
+  hasMedia: boolean,
+) {
+  if (!hasMedia || !["idle", "off", "standby", "unknown", "unavailable"].includes(state)) return false;
+  return Boolean(
+    firstString(source.queue_id, attrs.active_queue, attrs.mass_player_type) ||
+      firstString(source.app_id, attrs.app_id) === "music_assistant",
+  );
 }
 
 function absolutizeUrl(value: string, baseUrl?: string) {

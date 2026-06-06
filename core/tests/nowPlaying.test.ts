@@ -67,3 +67,64 @@ test("now-playing treats metadata-only payloads as active media", () => {
   );
 });
 
+test("now-playing treats stale Music Assistant idle state with media as playing", () => {
+  assert.deepEqual(
+    normalizeNowPlaying(
+      {
+        state: "idle",
+        attributes: {
+          mass_player_type: "player",
+          active_queue: "kitchen",
+          media_title: "Still Here",
+          media_artist: "The Queue",
+          media_album_name: "State Drift",
+          media_duration: 181,
+          entity_picture: "/api/media_player_proxy/media_player.ma_kitchen?token=abc",
+        },
+      },
+      { haBaseUrl: "https://ha.example" },
+    ),
+    {
+      state: "playing",
+      title: "Still Here",
+      artist: "The Queue",
+      album: "State Drift",
+      duration: 181,
+      entity_picture: "https://ha.example/api/media_player_proxy/media_player.ma_kitchen?token=abc",
+    },
+  );
+});
+
+test("now-playing accepts Music Assistant queue responses", () => {
+  assert.deepEqual(
+    normalizeNowPlaying({
+      "media_player.ma_kitchen_speaker": {
+        queue_id: "kitchen",
+        active: true,
+        elapsed_time: 37,
+        current_item: {
+          queue_item_id: "abc",
+          name: "Queue Name",
+          duration: 224,
+          media_item: {
+            media_type: "track",
+            uri: "spotify://track/123",
+            name: "New Signal",
+            image: "https://images.example/new-signal.jpg",
+            artists: [{ name: "Desk Light" }, { name: "Late Guest" }],
+            album: { name: "Night Mode" },
+          },
+        },
+      },
+    }),
+    {
+      state: "playing",
+      title: "New Signal",
+      artist: "Desk Light, Late Guest",
+      album: "Night Mode",
+      duration: 224,
+      position: 37,
+      entity_picture: "https://images.example/new-signal.jpg",
+    },
+  );
+});
