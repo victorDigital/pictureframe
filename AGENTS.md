@@ -8,8 +8,8 @@ repo for the first time. Humans should read [SPEC.md](./SPEC.md) and
 
 A self-updating Wayland kiosk: a repurposed laptop boots into Chromium
 controlled by a local TypeScript service (`frame-core`). Built-in screens
-(clock, photos, now-playing) render as iframes inside a shell page in Tab 0;
-arbitrary URL screens render as separate Chromium tabs activated via CDP.
+(clock, now-playing) render as iframes inside a shell page in Tab 0; arbitrary
+URL screens render as separate Chromium tabs activated via CDP.
 
 The architectural primitives and the entire intended behavior are in
 [SPEC.md](./SPEC.md) — when in doubt, the spec is the source of truth.
@@ -106,7 +106,7 @@ loopback-bypass logic for `/ws` and `/api/events`.
 4. That's it. `GET /api/builtins` will pick the manifest up automatically
    and the web UI's screen editor will render a typed form for it.
 
-If the screen needs to talk to a third-party API (HA, Immich, etc.), be
+If the screen needs to talk to a third-party API (HA, etc.), be
 explicit about CORS in the manifest description.
 
 ## Adding a migration
@@ -154,8 +154,8 @@ don't reinvent that.
 The SPEC is implemented end-to-end. A few items are explicit non-goals
 or live in operator hands:
 
-- **CalDAV / Google Photos.** §11 calls these out as best-effort; photos
-  prefers Immich.
+- **CalDAV.** §11 calls this out as best-effort; photo slideshows are URL
+  screens.
 - **Multi-device clustering.** Single device, single config file.
 - **Public internet exposure.** Bearer-token + LAN trust. The UI banners
   a warning if the device's IP isn't in RFC1918.

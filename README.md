@@ -1,8 +1,8 @@
 # Picture Frame
 
-A repurposed laptop turned into a flexible information display: clock, photos,
-now-playing, Grafana, Home Assistant dashboards — anything that can render in a
-browser, plus a small set of first-class built-in screens.
+A repurposed laptop turned into a flexible information display: clock,
+now-playing, photo slideshows, Grafana, Home Assistant dashboards — anything
+that can render in a browser, plus a small set of first-class built-in screens.
 
 See [SPEC.md](./SPEC.md) for the full design.
 
@@ -92,10 +92,8 @@ Everything lives under `/etc/frame/`:
   `secrets/release.pub` — mode `0640`, owned by `root:frame`
 
 Examples ship in this repo as [`config.example.yaml`](./config.example.yaml)
-and [`screens.example.yaml`](./screens.example.yaml).
-
-The `photos` built-in defaults to Google Photos. Setup notes for OAuth token
-files and album config are in [`docs/GOOGLE_PHOTOS.md`](./docs/GOOGLE_PHOTOS.md).
+and [`screens.example.yaml`](./screens.example.yaml). Photo slideshows should
+be configured as URL screens backed by your preferred gallery or local web app.
 
 Bad configs put frame-core into **safe mode** (SPEC §8.2): the API is still
 reachable, the only screen is `clock`, the validation reason is

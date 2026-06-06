@@ -173,109 +173,6 @@ test("/api/now_playing accepts HA media_player payloads without auth", async () 
   setNowPlaying(null);
 });
 
-test("/api/photos/google lists and proxies Google Photos album items", async () => {
-  const deps = await makeDeps();
-  const clientSecretFile = path.join(deps.tmp, "google_client_secret");
-  const refreshTokenFile = path.join(deps.tmp, "google_refresh_token");
-  await fs.writeFile(clientSecretFile, "client-secret", "utf8");
-  await fs.writeFile(refreshTokenFile, "refresh-token", "utf8");
-  deps.configStore.current.screens.push({
-    id: "photos",
-    name: "Photos",
-    type: "builtin",
-    source: "photos",
-    preload: true,
-    config: {
-      library: "google",
-      google_album_id: "album-1",
-      google_client_id: "client-id",
-      google_client_secret_file: clientSecretFile,
-      google_refresh_token_file: refreshTokenFile,
-      google_max_items: 10,
-      google_image_width: 1200,
-      google_image_height: 900,
-    },
-  });
-  const originalFetch = globalThis.fetch;
-  const calls: Array<{ url: string; init?: RequestInit }> = [];
-  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-    calls.push({ url, init });
-    if (url === "https://oauth2.googleapis.com/token") {
-      assert.equal(init?.method, "POST");
-      assert.ok(String(init?.body).includes("refresh_token=refresh-token"));
-      return jsonResponse({ access_token: "access-token", expires_in: 3600 });
-    }
-    if (url === "https://photoslibrary.googleapis.com/v1/mediaItems:search") {
-      assert.equal((init?.headers as Record<string, string>).authorization, "Bearer access-token");
-      assert.equal(JSON.parse(String(init?.body)).albumId, "album-1");
-      return jsonResponse({
-        mediaItems: [
-          {
-            id: "image-1",
-            filename: "Kitchen.jpg",
-            mimeType: "image/jpeg",
-            baseUrl: "https://lh3.googleusercontent.com/image-1",
-          },
-          {
-            id: "video-1",
-            filename: "Clip.mp4",
-            mimeType: "video/mp4",
-            baseUrl: "https://lh3.googleusercontent.com/video-1",
-          },
-        ],
-      });
-    }
-    if (url === "https://photoslibrary.googleapis.com/v1/mediaItems/image-1") {
-      assert.equal((init?.headers as Record<string, string>).authorization, "Bearer access-token");
-      return jsonResponse({
-        id: "image-1",
-        filename: "Kitchen.jpg",
-        mimeType: "image/jpeg",
-        baseUrl: "https://lh3.googleusercontent.com/image-1",
-      });
-    }
-    if (url === "https://lh3.googleusercontent.com/image-1=w1200-h900") {
-      return new Response(Buffer.from("jpeg"), { status: 200, headers: { "content-type": "image/jpeg" } });
-    }
-    return new Response("not found", { status: 404 });
-  }) as typeof fetch;
-
-  try {
-    const app = await createServer({ ...deps, version: "v0.0.0-test" });
-    const list = await app.inject({ method: "GET", url: "/api/photos/google?screen=photos" });
-    assert.equal(list.statusCode, 200);
-    assert.deepEqual(JSON.parse(list.body), {
-      photos: [
-        {
-          id: "image-1",
-          url: "/api/photos/google/media?screen=photos&id=image-1",
-          caption: "Kitchen.jpg",
-        },
-      ],
-    });
-
-    const image = await app.inject({
-      method: "GET",
-      url: "/api/photos/google/media?screen=photos&id=image-1",
-    });
-    assert.equal(image.statusCode, 200);
-    assert.equal(image.headers["content-type"], "image/jpeg");
-    assert.equal(image.body, "jpeg");
-    assert.ok(calls.some((call) => call.url === "https://lh3.googleusercontent.com/image-1=w1200-h900"));
-    await app.close();
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-function jsonResponse(body: unknown) {
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { "content-type": "application/json" },
-  });
-}
-
 test("POST /api/updates/apply returns accepted after queuing update", async () => {
   const deps = await makeDeps();
   const calls: Array<{ force: boolean }> = [];
@@ -319,7 +216,7 @@ test("PUT /api/screens returns friendly message when default_screen would be rem
     url: "/api/screens",
     headers: { authorization: "Bearer " + "x".repeat(24), "content-type": "application/json" },
     payload: JSON.stringify({
-      screens: [{ id: "photos", name: "Photos", type: "builtin", source: "photos", preload: false }],
+      screens: [{ id: "dashboard", name: "Dashboard", type: "url", source: "https://example.test", preload: false }],
     }),
   });
   assert.equal(r.statusCode, 400);

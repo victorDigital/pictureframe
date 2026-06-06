@@ -12,7 +12,7 @@ function makeScheduler() {
   return new Scheduler({
     screens: [
       { id: "clock", name: "Clock", type: "builtin", source: "clock", preload: true },
-      { id: "photos", name: "Photos", type: "builtin", source: "photos", preload: false },
+      { id: "dashboard", name: "Dashboard", type: "url", source: "https://dashboard.local", preload: false },
     ],
     defaultScreen: "clock",
     pinnedTimeoutHours: 4,
@@ -26,7 +26,7 @@ test("RuleStore loads valid rules.yaml and applies them to the engine", async ()
     file,
     YAML.stringify({
       rules: [
-        { id: "morning", cron: "0 9 * * 1-5", screenId: "photos", durationMin: 60, enabled: true },
+        { id: "morning", cron: "0 9 * * 1-5", screenId: "dashboard", durationMin: 60, enabled: true },
       ],
     }),
   );

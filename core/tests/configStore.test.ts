@@ -67,7 +67,7 @@ test("ConfigStore.reload picks up edits made on disk", async () => {
     YAML.stringify({
       screens: [
         { id: "clock", name: "Clock", type: "builtin", source: "clock", preload: true },
-        { id: "photos", name: "Photos", type: "builtin", source: "photos", preload: false },
+        { id: "dashboard", name: "Dashboard", type: "url", source: "https://dashboard.local", preload: false },
       ],
     }),
   );

@@ -41,7 +41,7 @@ import {
   AlertTitle,
 } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
-import { api } from "../api.js";
+import { ApiError, api } from "../api.js";
 import { ConfirmButton } from "./common/ConfirmButton.js";
 import { ErrorAlert } from "./common/ErrorAlert.js";
 import { PageHeader } from "./common/PageHeader.js";
@@ -138,6 +138,43 @@ type TestResult = {
   error?: string;
 };
 
+const URL_SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
+const HOST_PORT_RE = /^[a-z0-9.-]+:\d+(?:[/#?]|$)/i;
+
+function messageFromError(err: unknown) {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function normalizeUrlSource(source: string) {
+  const trimmed = source.trim();
+  if (!trimmed) return trimmed;
+  if (URL_SCHEME_RE.test(trimmed) && !HOST_PORT_RE.test(trimmed)) return trimmed;
+  const local =
+    /^localhost(?::|[/#?]|$)/i.test(trimmed) ||
+    /^127\./.test(trimmed) ||
+    /^10\./.test(trimmed) ||
+    /^192\.168\./.test(trimmed) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(trimmed) ||
+    HOST_PORT_RE.test(trimmed);
+  return `${local ? "http" : "https"}://${trimmed}`;
+}
+
+function validateUrlSource(source: string) {
+  try {
+    const url = new URL(normalizeUrlSource(source));
+    if (!["http:", "https:", "file:"].includes(url.protocol)) {
+      return `URL screens support http, https, and file URLs. Got ${url.protocol}`;
+    }
+    return null;
+  } catch {
+    return "Enter a valid URL.";
+  }
+}
+
+function sameScreens(a: Screen[], b: Screen[]) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 export function ScreensSection() {
   const [screens, setScreens] = useState<Screen[]>([]);
   const [editing, setEditing] = useState<Screen | null>(null);
@@ -150,7 +187,7 @@ export function ScreensSection() {
       const b = await api<{ screens: Screen[] }>("/api/screens");
       setScreens(b.screens);
     } catch (e) {
-      setErr(String(e instanceof Error ? e.message : e));
+      setErr(messageFromError(e));
     }
   }
   useEffect(() => {
@@ -165,7 +202,7 @@ export function ScreensSection() {
       });
       toast.success(mode === "pin" ? `Pinned ${id}` : `Queued ${id}`);
     } catch (e) {
-      toast.error(`Show failed: ${e instanceof Error ? e.message : e}`);
+      toast.error(`Show failed: ${messageFromError(e)}`);
     }
   }
 
@@ -176,7 +213,7 @@ export function ScreensSection() {
       toast.success(`Deleted ${id}`);
       refresh();
     } catch (e) {
-      setErr(String(e instanceof Error ? e.message : e));
+      setErr(messageFromError(e));
     }
   }
 
@@ -188,21 +225,42 @@ export function ScreensSection() {
     } catch (e) {
       setTestResult({
         id,
-        result: { ok: false, loaded: false, consoleErrors: [], error: String(e) },
+        result: { ok: false, loaded: false, consoleErrors: [], error: messageFromError(e) },
       });
     }
   }
 
   async function save(updated: Screen) {
-    const exists = screens.find((s) => s.id === updated.id);
-    const next = exists ? screens.map((s) => (s.id === updated.id ? updated : s)) : [...screens, updated];
+    const normalized = {
+      ...updated,
+      id: updated.id.trim(),
+      name: updated.name.trim(),
+      source: updated.type === "url" ? normalizeUrlSource(updated.source) : updated.source.trim(),
+    };
+    const exists = screens.find((s) => s.id === normalized.id);
+    const next = exists
+      ? screens.map((s) => (s.id === normalized.id ? normalized : s))
+      : [...screens, normalized];
     try {
       await api("/api/screens", { method: "PUT", body: JSON.stringify({ screens: next }) });
-      toast.success(exists ? `Updated ${updated.id}` : `Created ${updated.id}`);
+      toast.success(exists ? `Updated ${normalized.id}` : `Created ${normalized.id}`);
       setEditing(null);
       refresh();
     } catch (e) {
-      setErr(String(e instanceof Error ? e.message : e));
+      if (e instanceof ApiError && e.network) {
+        try {
+          const current = await api<{ screens: Screen[] }>("/api/screens", { timeoutMs: 5_000 });
+          if (sameScreens(current.screens, next)) {
+            setScreens(current.screens);
+            toast.success(exists ? `Updated ${normalized.id}` : `Created ${normalized.id}`);
+            setEditing(null);
+            setErr(null);
+            return;
+          }
+        } catch {
+        }
+      }
+      setErr(messageFromError(e));
     }
   }
 
@@ -407,13 +465,14 @@ function ScreenEditor({
 }: {
   screen: Screen;
   onCancel: () => void;
-  onSave: (s: Screen) => void;
+  onSave: (s: Screen) => Promise<void> | void;
   error?: string | null;
 }) {
   const [draft, setDraft] = useState<Screen>(screen);
   const [builtins, setBuiltins] = useState<BuiltinManifest[]>([]);
   const [rawJson, setRawJson] = useState(false);
   const [tagInput, setTagInput] = useState<string>((screen.tags ?? []).join(", "));
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     api<{ builtins: BuiltinManifest[] }>("/api/builtins")
@@ -431,6 +490,11 @@ function ScreenEditor({
     () => (manifest ? validateConfig(draft.config, manifest.config_schema) : []),
     [manifest, draft.config],
   );
+  const urlError = useMemo(
+    () => (draft.type === "url" && draft.source.trim() ? validateUrlSource(draft.source) : null),
+    [draft.source, draft.type],
+  );
+  const editorErrors = urlError ? [...validationErrors, urlError] : validationErrors;
 
   const update = <K extends keyof Screen>(key: K, value: Screen[K]) =>
     setDraft({ ...draft, [key]: value });
@@ -640,7 +704,11 @@ function ScreenEditor({
               </SelectContent>
             </Select>
           ) : (
-            <Input value={draft.source} onChange={(e) => update("source", e.target.value)} />
+            <Input
+              value={draft.source}
+              onChange={(e) => update("source", e.target.value)}
+              onBlur={(e) => update("source", normalizeUrlSource(e.target.value))}
+            />
           )}
         </Field>
 
@@ -741,13 +809,13 @@ function ScreenEditor({
           )}
         </div>
 
-        {validationErrors.length > 0 && (
+        {editorErrors.length > 0 && (
           <Alert variant="destructive">
             <HugeiconsIcon icon={Alert02Icon} strokeWidth={2} />
-            <AlertTitle>Config issues</AlertTitle>
+            <AlertTitle>Screen issues</AlertTitle>
             <AlertDescription>
               <ul className="list-disc pl-4">
-                {validationErrors.map((m, i) => (
+                {editorErrors.map((m, i) => (
                   <li key={i}>{m}</li>
                 ))}
               </ul>
@@ -757,12 +825,26 @@ function ScreenEditor({
 
         <div className="flex items-center gap-2 pt-2">
           <Button
-            onClick={() => onSave(draft)}
+            onClick={async () => {
+              const next = {
+                ...draft,
+                id: draft.id.trim(),
+                name: draft.name.trim(),
+                source: draft.type === "url" ? normalizeUrlSource(draft.source) : draft.source.trim(),
+              };
+              setDraft(next);
+              setSaving(true);
+              try {
+                await onSave(next);
+              } finally {
+                setSaving(false);
+              }
+            }}
             disabled={
-              !draft.id || !draft.name || !draft.source || validationErrors.length > 0
+              saving || !draft.id.trim() || !draft.name.trim() || !draft.source.trim() || editorErrors.length > 0
             }
           >
-            Save
+            {saving ? "Saving..." : "Save"}
           </Button>
           <Button variant="outline" onClick={onCancel}>
             Cancel

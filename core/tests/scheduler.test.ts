@@ -5,7 +5,7 @@ import type { Screen } from "../src/config/schema.js";
 
 const screens: Screen[] = [
   { id: "clock", name: "Clock", type: "builtin", source: "clock", preload: true },
-  { id: "photos", name: "Photos", type: "builtin", source: "photos", preload: false },
+  { id: "dashboard", name: "Dashboard", type: "url", source: "https://dashboard.local", preload: false },
   { id: "grafana", name: "Grafana", type: "url", source: "https://g.local", preload: true },
 ];
 
@@ -32,8 +32,8 @@ test("manual_pinned overrides default", () => {
   const ids: string[] = [];
   s.on("activate", (screen) => ids.push(screen.id));
   s.start();
-  s.show("photos", "manual_pinned");
-  assert.deepEqual(ids, ["clock", "photos"]);
+  s.show("dashboard", "manual_pinned");
+  assert.deepEqual(ids, ["clock", "dashboard"]);
 });
 
 test("manual_next yields to a subsequent ha claim", () => {
@@ -41,8 +41,8 @@ test("manual_next yields to a subsequent ha claim", () => {
   const ids: string[] = [];
   s.on("activate", (screen) => ids.push(screen.id));
   s.start();
-  s.show("photos", "manual_next");
-  assert.equal(ids[ids.length - 1], "photos");
+  s.show("dashboard", "manual_next");
+  assert.equal(ids[ids.length - 1], "dashboard");
 
   // A scheduled event would normally yield to manual_next since manual_next
   // has higher priority (25 vs 10). But the spec says manual_next "expires
@@ -79,15 +79,12 @@ test("oneShot claims are removed after activation, falling back to default", () 
   const ids: string[] = [];
   s.on("activate", (screen) => ids.push(screen.id));
   s.start();
-  // Higher-priority oneShot claim wins exactly once.
-  s.show("photos", "ha", { oneShot: true });
-  assert.equal(ids[ids.length - 1], "photos");
-  // It should have been removed from the claim set.
+  s.show("dashboard", "ha", { oneShot: true });
+  assert.equal(ids[ids.length - 1], "dashboard");
   assert.equal(
-    s.list().some((c) => c.screenId === "photos" && c.source === "ha"),
+    s.list().some((c) => c.screenId === "dashboard" && c.source === "ha"),
     false,
   );
-  // A subsequent low-priority claim arrives and replaces the active screen.
   s.show("grafana", "scheduled");
   assert.equal(ids[ids.length - 1], "grafana");
 });

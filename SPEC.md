@@ -205,7 +205,7 @@ type Claim = {
 | Source           | Priority | Behavior                                                           |
 |------------------|----------|--------------------------------------------------------------------|
 | `default`        | 0        | Fallback when stack is empty; always present                       |
-| `scheduled`      | 10       | "Grafana 9–5", "photos in the morning"                             |
+| `scheduled`      | 10       | "Grafana 9–5", "dashboard in the morning"                          |
 | `ha`             | 20       | Explicit HA service call                                           |
 | `manual_next`    | 25       | "Show this next, then resume schedule" — expires on next event     |
 | `programmatic`   | 30       | "Spotify is playing → now-playing"                                 |
@@ -450,7 +450,6 @@ color-temperature-capable light after reconnects.
 | ID               | Description                                                                       |
 |------------------|-----------------------------------------------------------------------------------|
 | `clock`          | Large clock + date, configurable face (analog / digital / minimal)                |
-| `photos`         | Slideshow from a configured photo library backend (see §11)                       |
 | `now-playing`    | Album art + track info; driven by HA media_player state pushed via MQTT           |
 
 Each built-in lives under `builtin-screens/<id>/` with `index.html`, `manifest.json`, and assets. The manifest declares config schema; the web UI auto-generates a form for it.
@@ -581,18 +580,10 @@ screens:
     config: { face: minimal, show_seconds: false }
     preload: true
 
-  - id: photos
+  - id: family-photos
     name: Family photos
-    type: builtin
-    source: photos
-    config:
-      library: google
-      google_album_id: "replace-with-google-photos-album-id"
-      google_client_id: "replace-with-google-oauth-client-id"
-      google_client_secret_file: /etc/frame/secrets/google_photos_client_secret
-      google_refresh_token_file: /etc/frame/secrets/google_photos_refresh_token
-      interval_sec: 30
-      transition_style: kenburns
+    type: url
+    source: https://photos.local/slideshow
     preload: true
 
   - id: grafana-home
@@ -637,15 +628,10 @@ The earlier draft had sudoers wildcards on backlight paths. Wildcards in sudoers
 
 ## 11. Known caveats and recommendations
 
-**Photo library backend.** The `photos` built-in defaults to Google Photos through a frame-core OAuth proxy. Secrets stay on the frame as files, and the browser only receives local `/api/photos/google/*` URLs. Google tightened the Photos Library API in 2025, so this backend is limited to content the configured Google API app can access, primarily app-created albums/media. Arbitrary user-library picking would require the newer Google Photos Picker API, which is not implemented here.
-
-Supported backends:
-
-1. **Google Photos** - default, album-backed, proxied by frame-core
-2. **Local directory** - simplest fallback, no service to run
-3. **Immich** - self-hosted photo library fallback
-
-Configure via the screen's `library` config field.
+**Photo slideshows.** Photo screens are ordinary URL screens. Point them at a
+local gallery, Immich slideshow/share URL, static HTML slideshow, or another web
+app that already handles authentication and library access. The built-in Google
+Photos OAuth proxy is intentionally not part of the kiosk.
 
 **LAN trust assumption.** Bearer-token auth assumes the LAN is trusted. Family-message is unauthenticated when enabled. Both reasonable for a home network; neither appropriate for shared spaces. The UI banners a warning if the device's IP is publicly reachable.
 
@@ -680,7 +666,6 @@ picture-frame/
 ├── web/                     (React control UI)
 ├── builtin-screens/
 │   ├── clock/
-│   ├── photos/
 │   └── now-playing/
 ├── migrations/
 ├── deploy/
@@ -724,7 +709,7 @@ All sections, bearer auth, brightness/reboot/logs, screen editor with Test butto
 MQTT discovery, all entities, command topics. Auth-failure handling. End-to-end with a real automation.
 
 ### Phase 7 — Built-ins (ongoing)
-Clock, photos, and now-playing first. VNC in web UI. Polish.
+Clock and now-playing first. VNC in web UI. Polish.
 
 ---
 

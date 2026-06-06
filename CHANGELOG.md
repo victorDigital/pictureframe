@@ -5,6 +5,18 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.31] - 2026-06-06
+
+### Changed
+
+- URL screen saves now normalize common URL inputs, report clearer network/API
+  failures, prevent double-submit, and reconcile after a dropped save response.
+
+### Removed
+
+- Removed the `photos` built-in and the Google Photos OAuth proxy. Photo
+  slideshows should be configured as URL screens.
+
 ## [0.0.30] - 2026-06-06
 
 ### Fixed
