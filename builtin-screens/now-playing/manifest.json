@@ -8,7 +8,7 @@
       "theme": {
         "type": "string",
         "enum": ["auto", "light", "dark", "midnight"],
-        "default": "auto",
+        "default": "midnight",
         "description": "Color scheme. Auto follows the device/OS preference."
       },
       "font_scale": {

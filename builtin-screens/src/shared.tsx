@@ -23,8 +23,8 @@ export const weightClass: Record<string, string> = {
 export function useScreenEnvironment(config: Config, id: string) {
   useEffect(() => {
     const root = document.documentElement;
-    const theme = stringValue(config.theme, "auto");
-    root.dataset.theme = ["auto", "light", "dark", "midnight"].includes(theme) ? theme : "auto";
+    const theme = stringValue(config.theme, "midnight");
+    root.dataset.theme = ["auto", "light", "dark", "midnight"].includes(theme) ? theme : "midnight";
     root.style.setProperty("--font-scale", String(clamp(numberValue(config.font_scale, 1), 0.5, 2)));
     root.style.setProperty("--font-sans", fontStacks[stringValue(config.font_family, "geist")] ?? "\"Geist Variable\", ui-sans-serif, system-ui, sans-serif");
     if (isCssColor(config.accent_color)) root.style.setProperty("--primary", config.accent_color);

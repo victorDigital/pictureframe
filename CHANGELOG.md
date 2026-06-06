@@ -5,6 +5,16 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.32] - 2026-06-06
+
+### Fixed
+
+- Made built-in screens default to the midnight theme so clock screens without
+  explicit theme config do not fall back to a white kiosk background.
+- Reduced the analog clock canvas backing-store size on high-DPI displays and
+  reset its cached layer after canvas context loss to prevent long-running
+  blank/white clock renders.
+
 ## [0.0.31] - 2026-06-06
 
 ### Changed

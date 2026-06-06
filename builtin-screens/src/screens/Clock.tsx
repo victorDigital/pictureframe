@@ -65,7 +65,7 @@ function DigitalClock(props: { date: Date; variant: "digital" | "minimal"; showS
             <span>{parts.ss}</span>
           </>
         ) : null}
-        {parts.period ? <span className={`${digital ? "ml-4 text-title-md" : "text-title-sm"} text-muted-foreground`}> {parts.period}</span> : null}
+        {parts.period ? <span className={`${digital ? "ml-4 text-title-sm" : "text-title-sm"} text-muted-foreground`}> {parts.period}</span> : null}
       </div>
       {props.showDate ? (
         <div className={digital ? "text-title-sm text-muted-foreground" : "text-caption uppercase tracking-widest"}>
@@ -119,12 +119,14 @@ function AnalogClock({ showSeconds, showDate }: { showSeconds: boolean; showDate
     let staticLayer: HTMLCanvasElement | null = null;
     let staticKey = "";
     let lastFrameAt = 0;
+    let contextLost = false;
 
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
-      dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
       width = Math.max(1, rect.width);
       height = Math.max(1, rect.height);
+      const maxDprForPixels = Math.sqrt(8_000_000 / Math.max(1, width * height));
+      dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, maxDprForPixels, 2));
       fontFamily = getComputedStyle(canvas).fontFamily || fontFamily;
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
@@ -152,7 +154,7 @@ function AnalogClock({ showSeconds, showDate }: { showSeconds: boolean; showDate
     };
 
     const draw = (timestamp: number) => {
-      if (timestamp - lastFrameAt >= 1000 / 30) {
+      if (!contextLost && timestamp - lastFrameAt >= 1000 / 30) {
         const date = new Date();
         const layer = getStaticLayer(date);
         if (layer) ctx.drawImage(layer, 0, 0, width, height);
@@ -164,12 +166,27 @@ function AnalogClock({ showSeconds, showDate }: { showSeconds: boolean; showDate
     };
 
     const observer = new ResizeObserver(resize);
+    const handleContextLost = (ev: Event) => {
+      ev.preventDefault();
+      contextLost = true;
+      staticLayer = null;
+      staticKey = "";
+    };
+    const handleContextRestored = () => {
+      contextLost = false;
+      resize();
+      lastFrameAt = 0;
+    };
+    canvas.addEventListener("contextlost", handleContextLost);
+    canvas.addEventListener("contextrestored", handleContextRestored);
     observer.observe(canvas);
     resize();
     frame = requestAnimationFrame(draw);
 
     return () => {
       cancelAnimationFrame(frame);
+      canvas.removeEventListener("contextlost", handleContextLost);
+      canvas.removeEventListener("contextrestored", handleContextRestored);
       observer.disconnect();
     };
   }, [showSeconds, showDate]);
