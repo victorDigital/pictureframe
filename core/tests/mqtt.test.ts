@@ -179,14 +179,18 @@ test("HA now-playing command stores media_player attributes", async () => {
   await handleCommand(
     "frame/cmd/now_playing",
     JSON.stringify({
-      state: "playing",
-      attributes: {
-        media_title: "Soft Light",
-        media_artist: "The Frames",
-        media_album_name: "Kiosk Sessions",
-        media_duration: 245,
-        media_position: 42,
-        entity_picture: "/api/media_player_proxy/media_player.spotify?token=abc",
+      trigger: {
+        to_state: {
+          state: "PLAYING",
+          attributes: {
+            media_title: "Soft Light",
+            media_artist: "The Frames",
+            media_album_name: "Kiosk Sessions",
+            media_duration: 245,
+            media_position: 42,
+            entity_picture: "/api/media_player_proxy/media_player.spotify?token=abc",
+          },
+        },
       },
     }),
   );

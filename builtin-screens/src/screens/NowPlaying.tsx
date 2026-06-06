@@ -3,14 +3,15 @@ import type React from "react";
 import type { Config } from "../shared";
 import { boolValue, clamp, isCssColor, numberValue, Shell, stringValue } from "../shared";
 
-type NowPlaying = { state?: string; title?: string; artist?: string; album?: string; entity_picture?: string; duration?: number; position?: number };
+type NowPlaying = { state?: string; title?: string; artist?: string; album?: string; entity_picture?: string; duration?: number; position?: number; position_updated_at?: string };
 
 export function NowPlayingScreen({ config }: { config: Config }) {
   const [state, setState] = useState<NowPlaying | null>(null);
   const [progress, setProgress] = useState(0);
   const [sampledAccent, setSampledAccent] = useState<string | null>(null);
   const showProgress = boolValue(config.show_progress, true);
-  const art = state?.state === "playing" ? state.entity_picture || "" : "";
+  const visible = shouldShowNowPlaying(state);
+  const art = visible ? state?.entity_picture || "" : "";
   const layout = stringValue(config.layout, "split");
   const accentSource = stringValue(config.accent_source, "art");
   useEffect(() => {
@@ -38,17 +39,18 @@ export function NowPlayingScreen({ config }: { config: Config }) {
     return () => removeEventListener("message", onMessage);
   }, []);
   useEffect(() => {
-    if (!showProgress || !state || state.state !== "playing" || !state.duration || state.position == null) {
+    if (!showProgress || !visible || !state?.duration || state.position == null) {
       setProgress(0);
       return;
     }
-    const startedAt = Date.now() - state.position * 1000;
+    const updatedAt = state.position_updated_at ? Date.parse(state.position_updated_at) : NaN;
+    const startedAt = Number.isFinite(updatedAt) ? updatedAt - state.position * 1000 : Date.now() - state.position * 1000;
     const duration = state.duration * 1000;
     const update = () => setProgress(clamp(((Date.now() - startedAt) / duration) * 100, 0, 100));
     update();
     const timer = setInterval(update, 500);
     return () => clearInterval(timer);
-  }, [showProgress, state]);
+  }, [showProgress, state, visible]);
   useEffect(() => {
     let cancelled = false;
     if (accentSource !== "art" || !art) {
@@ -62,7 +64,8 @@ export function NowPlayingScreen({ config }: { config: Config }) {
       cancelled = true;
     };
   }, [accentSource, art]);
-  if (!state || state.state !== "playing") return <Shell className="grid place-items-center text-4xl text-muted-foreground">Nothing is playing.</Shell>;
+  if (!visible || !state) return <Shell className="grid place-items-center text-4xl text-muted-foreground">Nothing is playing.</Shell>;
+  const current = state;
   const accent =
     accentSource === "custom" && isCssColor(config.accent_color)
       ? stringValue(config.accent_color)
@@ -88,9 +91,9 @@ export function NowPlayingScreen({ config }: { config: Config }) {
           <div className={artBox} style={{ backgroundImage: artImage }} role="img" aria-label="Album art" />
         </div>
         <div className={info}>
-          <h1 className="text-balance text-[clamp(3rem,7vw,9rem)] font-light leading-tight tracking-tight">{state.title}</h1>
-          <p className="mt-3 text-[clamp(1.5rem,3vw,3.5rem)] text-muted-foreground">{state.artist}</p>
-          <p className="mt-1 text-[clamp(1.1rem,1.8vw,2rem)] text-muted-foreground/70">{state.album}</p>
+          <h1 className="text-balance text-[clamp(3rem,7vw,9rem)] font-light leading-tight tracking-tight">{current.title}</h1>
+          <p className="mt-3 text-[clamp(1.5rem,3vw,3.5rem)] text-muted-foreground">{current.artist}</p>
+          <p className="mt-1 text-[clamp(1.1rem,1.8vw,2rem)] text-muted-foreground/70">{current.album}</p>
           {showProgress ? (
             <div className="mt-[clamp(1rem,3vh,2rem)] h-[0.3rem] overflow-hidden rounded-full bg-foreground/15">
               <div className="h-full rounded-[inherit] bg-[var(--np-accent,var(--primary))] transition-[width] duration-500 ease-linear" style={{ width: `${progress}%`, "--np-accent": accent } as React.CSSProperties} />
@@ -100,6 +103,14 @@ export function NowPlayingScreen({ config }: { config: Config }) {
       </section>
     </Shell>
   );
+}
+
+function shouldShowNowPlaying(state: NowPlaying | null) {
+  if (!state) return false;
+  const status = state.state?.toLowerCase() ?? "";
+  if (["playing", "buffering", "paused"].includes(status)) return true;
+  if (["idle", "off", "standby", "unknown", "unavailable"].includes(status)) return false;
+  return Boolean(state.title || state.artist || state.album || state.entity_picture);
 }
 
 function sampleArtColor(url: string) {

@@ -86,28 +86,31 @@ In HA:
       data:
         topic: frame/cmd/now_playing
         payload: >
-          {% set player = states.media_player.spotify %}
           {{
             {
-              "state": player.state,
-              "title": player.attributes.media_title,
-              "artist": player.attributes.media_artist,
-              "album": player.attributes.media_album_name,
-              "duration": player.attributes.media_duration | int(0),
-              "position": player.attributes.media_position | int(0),
-              "entity_picture": player.attributes.entity_picture
+              "ha_base_url": "http://homeassistant.local:8123",
+              "trigger": {
+                "to_state": {
+                  "state": trigger.to_state.state,
+                  "attributes": trigger.to_state.attributes
+                }
+              }
             } | to_json
           }}
 ```
 
-The frame also accepts HA-style payloads with an `attributes` object, so this is
-valid too:
+The `| to_json` filter matters. Without it, Home Assistant templates can render
+object-looking text that is not JSON. frame-core accepts the common JSON and
+YAML-like forms, but valid JSON is still the least surprising path.
+
+The frame also accepts simplified payloads, so this is valid too:
 
 ```yaml
 payload: >
   {% set player = states.media_player.spotify %}
   {{
     {
+      "ha_base_url": "http://homeassistant.local:8123",
       "state": player.state,
       "attributes": player.attributes
     } | to_json
@@ -135,6 +138,7 @@ The older REST push path still works:
         duration: "{{ state_attr('media_player.spotify', 'media_duration') | int(0) }}"
         position: "{{ state_attr('media_player.spotify', 'media_position') | int(0) }}"
         entity_picture: "{{ state_attr('media_player.spotify', 'entity_picture') }}"
+        ha_base_url: "http://homeassistant.local:8123"
 
 rest_command:
   frame_push_now_playing:
@@ -150,7 +154,8 @@ rest_command:
           "album": album,
           "duration": duration,
           "position": position,
-          "entity_picture": entity_picture
+          "entity_picture": entity_picture,
+          "ha_base_url": ha_base_url
         } | to_json
       }}
 ```

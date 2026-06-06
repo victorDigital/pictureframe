@@ -135,8 +135,9 @@ test("/api/now_playing accepts HA media_player payloads without auth", async () 
       media_album_name: "Kiosk Sessions",
       media_duration: "245",
       media_position: "42",
-      entity_picture: "https://ha.example/api/media_player_proxy/media_player.spotify?token=abc",
+      entity_picture: "/api/media_player_proxy/media_player.spotify?token=abc",
     },
+    ha_base_url: "https://ha.example",
   };
 
   const put = await app.inject({

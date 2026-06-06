@@ -405,6 +405,7 @@ MQTT command topics:
 - `frame/cmd/brightness` `{"value": 30}`
 - `frame/cmd/display_power` `{"state": "off"}`
 - `frame/cmd/color_temperature` `{"kelvin": 4000}`
+- `frame/cmd/now_playing` `{"state": "playing", "attributes": {"media_title": "..."}}`
 - `frame/cmd/update_now` — respects staging delay
 - `frame/cmd/update_now_force` — overrides staging delay
 

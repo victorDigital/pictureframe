@@ -5,6 +5,18 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.28] - 2026-06-06
+
+### Fixed
+
+- Made the Home Assistant now-playing integration accept full `trigger.to_state`
+  payloads, structured string payloads, uppercase player states, metadata-only
+  payloads, relative artwork URLs on REST and MQTT, and HA media position
+  timestamps.
+- The `now-playing` built-in now displays active metadata for playing,
+  buffering, and paused media states instead of falling back to "Nothing is
+  playing" when the payload shape differs from the simplified example.
+
 ## [0.0.27] - 2026-06-06
 
 ### Added

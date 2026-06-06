@@ -315,7 +315,7 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
   // ---- now playing (proxy for HA pushed media_player state) -----------------
 
   const updateNowPlaying = async (req: FastifyRequest<{ Body: unknown }>) => {
-    setNowPlaying(req.body ?? null);
+    setNowPlaying(req.body ?? null, { haBaseUrl: homeAssistantBaseUrl(req.body) });
     return { ok: true };
   };
 
@@ -723,6 +723,18 @@ function isLoopbackIp(ip: string) {
 function photoScreen(screens: Screen[], id?: string) {
   if (!id) return undefined;
   return screens.find((screen) => screen.id === id && screen.type === "builtin" && screen.source === "photos");
+}
+
+function homeAssistantBaseUrl(body: unknown) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return undefined;
+  const record = body as Record<string, unknown>;
+  const value =
+    typeof record.ha_base_url === "string"
+      ? record.ha_base_url
+      : typeof record.base_url === "string"
+        ? record.base_url
+        : "";
+  return value.trim() || undefined;
 }
 
 async function gpgFingerprint(armoredKey: string): Promise<string | null> {
