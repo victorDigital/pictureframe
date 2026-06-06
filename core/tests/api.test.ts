@@ -11,7 +11,6 @@ import { ShellBus } from "../src/api/shellBus.js";
 import { Updater } from "../src/updater/index.js";
 import { Brightness } from "../src/system/brightness.js";
 import { CdpManager } from "../src/cdp/manager.js";
-import { FamilyMessages } from "../src/api/familyMessage.js";
 import { RuleStore } from "../src/scheduler/rules.js";
 import { CronEngine } from "../src/scheduler/cron.js";
 import { VncSupervisor } from "../src/system/vnc.js";
@@ -42,7 +41,7 @@ async function makeDeps() {
       retain_releases: 3,
     },
     ha: { enabled: false },
-    builtins: { family_message: { enabled: false } },
+    builtins: {},
   };
   const screens: Screen[] = [
     { id: "clock", name: "Clock", type: "builtin", source: "clock", preload: true },
@@ -73,7 +72,6 @@ async function makeDeps() {
   });
   const brightness = new Brightness(config);
   const updater = new Updater(store, "v0.0.0-test");
-  const family = new FamilyMessages(scheduler);
   const engine = new CronEngine(scheduler);
   const rules = new RuleStore(path.join(tmp, "rules.yaml"), engine);
   const vnc = new VncSupervisor();
@@ -87,7 +85,6 @@ async function makeDeps() {
     updater,
     brightness,
     cdp,
-    family,
     rules,
     vnc,
     stateBus,
@@ -175,19 +172,6 @@ test("PUT /api/screens returns friendly message when default_screen would be rem
   const body = JSON.parse(r.body);
   assert.equal(body.error, "default_screen_missing");
   assert.match(body.message, /default_screen/);
-  await app.close();
-});
-
-test("POST /family-message returns 403 when disabled in config", async () => {
-  const deps = await makeDeps();
-  const app = await createServer({ ...deps, version: "v0.0.0-test" });
-  const r = await app.inject({
-    method: "POST",
-    url: "/family-message",
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({ message: "hello" }),
-  });
-  assert.equal(r.statusCode, 403);
   await app.close();
 });
 

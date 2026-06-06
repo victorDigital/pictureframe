@@ -1,65 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { Config } from "../shared";
-import { boolValue, clamp, ErrorPanel, fetchWithTimeout, numberValue, Shell, stringValue } from "../shared";
+import { clamp, ErrorPanel, numberValue, Shell, stringValue } from "../shared";
 
 type MediaItem = { url: string; caption: string };
 type PhotoItem = MediaItem & { api?: boolean };
 type PhotoSlide = { key: number; url: string; caption: string; visible: boolean; exiting: boolean };
-
-export function MediaViewerScreen({ config }: { config: Config }) {
-  const [items, setItems] = useState<MediaItem[]>([]);
-  const [index, setIndex] = useState(0);
-  const [error, setError] = useState("");
-  const interval = Math.max(3, numberValue(config.interval_sec, 15)) * 1000;
-  useEffect(() => {
-    async function load() {
-      const indexUrl = stringValue(config.index_url);
-      if (!indexUrl) {
-        setError("Configure index_url");
-        return;
-      }
-      try {
-        const res = await fetchWithTimeout(indexUrl);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const raw = await res.json();
-        if (!Array.isArray(raw)) throw new Error("Index must be a JSON array");
-        setItems(raw.map(normalizeMediaItem).filter((item) => item.url));
-      } catch (err) {
-        setError(String(err));
-      }
-    }
-    void load();
-  }, [config]);
-  const current = items[index];
-  const isVideo = current ? isVideoUrl(current.url) : false;
-  const advance = () => setIndex((i) => (items.length ? (i + 1) % items.length : i));
-  useEffect(() => {
-    if (!current || items.length <= 1) return;
-    const timer = setTimeout(advance, isVideo ? Math.max(interval, 3000) : interval);
-    return () => clearTimeout(timer);
-  }, [current, index, interval, isVideo, items.length]);
-  if (error) return <ErrorPanel message={error} />;
-  if (items.length === 0) return <ErrorPanel message="No media in directory." />;
-  return (
-    <MediaFrame
-      item={current!}
-      fit={stringValue(config.fit_mode, stringValue(config.fit, "contain"))}
-      captionPosition={stringValue(config.caption_position, "bottom")}
-      dots={boolValue(config.show_progress_dots, true) ? { count: items.length, index } : undefined}
-      onVideoEnded={advance}
-    />
-  );
-}
-
-function normalizeMediaItem(entry: unknown): MediaItem {
-  if (typeof entry === "string") return { url: entry, caption: captionFromUrl(entry) };
-  if (entry && typeof entry === "object") {
-    const data = entry as Record<string, unknown>;
-    const url = stringValue(data.url) || stringValue(data.src) || stringValue(data.href);
-    return { url, caption: stringValue(data.caption) || stringValue(data.title) || stringValue(data.name) || captionFromUrl(url) };
-  }
-  return { url: "", caption: "" };
-}
 
 function captionFromUrl(url: string) {
   try {
@@ -67,43 +12,6 @@ function captionFromUrl(url: string) {
   } catch {
     return "";
   }
-}
-
-function isVideoUrl(url: string) {
-  return /\.(mp4|webm|mov|m4v)(\?|$)/i.test(url);
-}
-
-function MediaFrame({ item, fit, captionPosition, dots, onVideoEnded }: { item: MediaItem; fit: string; captionPosition: string; dots?: { count: number; index: number }; onVideoEnded?: () => void }) {
-  const isVideo = isVideoUrl(item.url);
-  const object = fit === "cover" ? "object-cover" : "object-contain";
-  return (
-    <Shell className="relative flex flex-col bg-black">
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-        <div className="absolute inset-0 grid place-items-center bg-black">
-          {isVideo ? (
-            <video key={item.url} className={`h-full w-full opacity-100 transition-opacity duration-700 ease-out ${object}`} src={item.url} autoPlay muted playsInline onEnded={onVideoEnded} />
-          ) : (
-            <img key={item.url} className={`h-full w-full opacity-100 transition-opacity duration-700 ease-out ${object}`} src={item.url} alt={item.caption} />
-          )}
-        </div>
-        {captionPosition === "overlay" && item.caption ? (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-6 py-4">
-            <p className="max-w-2xl truncate rounded-lg border border-border bg-card px-4 py-3 text-center text-lg font-medium leading-snug text-card-foreground backdrop-blur-sm">{item.caption}</p>
-          </div>
-        ) : null}
-        {dots && dots.count > 1 ? (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center gap-2 px-6 py-4">
-            {Array.from({ length: dots.count }, (_, i) => <span key={i} className={`h-2 w-2 rounded-full transition-all duration-300 ${i === dots.index ? "bg-primary" : "bg-muted opacity-50"}`} />)}
-          </div>
-        ) : null}
-      </div>
-      {captionPosition === "bottom" && item.caption ? (
-        <footer className="shrink-0 border-t border-border bg-card px-6 py-4">
-          <p className="truncate text-center text-lg font-medium text-card-foreground">{item.caption}</p>
-        </footer>
-      ) : null}
-    </Shell>
-  );
 }
 
 export function PhotosScreen({ config }: { config: Config }) {

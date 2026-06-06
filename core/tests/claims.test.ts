@@ -4,13 +4,13 @@ import { makeClaim, resolveActive, SOURCE_PRIORITY } from "../src/scheduler/clai
 
 test("higher-priority claim wins", () => {
   const a = makeClaim("clock", "default");
-  const b = makeClaim("weather", "manual_pinned");
+  const b = makeClaim("photos", "manual_pinned");
   const winner = resolveActive([a, b]);
-  assert.equal(winner?.screenId, "weather");
+  assert.equal(winner?.screenId, "photos");
 });
 
 test("expired claims are ignored", () => {
-  const expired = makeClaim("weather", "manual_pinned");
+  const expired = makeClaim("photos", "manual_pinned");
   expired.expiresAt = Date.now() - 1000;
   const fallback = makeClaim("clock", "default");
   const winner = resolveActive([expired, fallback]);

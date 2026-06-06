@@ -38,7 +38,3 @@ ha:
 vnc:
   enabled: true
   password_file: /etc/frame/secrets/vnc
-
-builtins:
-  family_message:
-    enabled: false

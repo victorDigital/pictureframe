@@ -42,20 +42,17 @@ test("applyConfigPatch updates HA settings without touching other keys", async (
   await fs.rm(dir, { recursive: true, force: true });
 });
 
-test("applyConfigPatch creates missing sections (vnc) and toggles builtins", async () => {
+test("applyConfigPatch creates missing sections", async () => {
   const { dir, file } = await fixture({
     device: { name: "f1" },
   });
   await applyConfigPatch(file, {
     vnc: { enabled: false },
-    builtins: { family_message: { enabled: true } },
   });
   const round = YAML.parse(await fs.readFile(file, "utf8")) as {
     vnc: { enabled: boolean };
-    builtins: { family_message: { enabled: boolean } };
   };
   assert.equal(round.vnc.enabled, false);
-  assert.equal(round.builtins.family_message.enabled, true);
   await fs.rm(dir, { recursive: true, force: true });
 });
 

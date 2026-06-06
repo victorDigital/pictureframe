@@ -205,7 +205,7 @@ type Claim = {
 | Source           | Priority | Behavior                                                           |
 |------------------|----------|--------------------------------------------------------------------|
 | `default`        | 0        | Fallback when stack is empty; always present                       |
-| `scheduled`      | 10       | "Grafana 9–5", "weather in the morning"                            |
+| `scheduled`      | 10       | "Grafana 9–5", "photos in the morning"                             |
 | `ha`             | 20       | Explicit HA service call                                           |
 | `manual_next`    | 25       | "Show this next, then resume schedule" — expires on next event     |
 | `programmatic`   | 30       | "Spotify is playing → now-playing"                                 |
@@ -449,21 +449,10 @@ color-temperature-capable light after reconnects.
 | ID               | Description                                                                       |
 |------------------|-----------------------------------------------------------------------------------|
 | `clock`          | Large clock + date, configurable face (analog / digital / minimal)                |
-| `calendar`       | Agenda from configured CalDAV / Google Calendar source                            |
-| `media-viewer`   | Local image/video viewer pointing at a directory                                  |
 | `photos`         | Slideshow from a configured photo library backend (see §11)                       |
-| `weather`        | Current conditions + forecast via Open-Meteo (no API key)                         |
 | `now-playing`    | Album art + track info; driven by HA media_player state pushed via MQTT           |
-| `transit`        | Next departures from configured stops                                             |
-| `agenda-board`   | Day-at-a-glance: weather + calendar + commute                                     |
-| `status-board`   | Grid of HA sensor tiles, configurable layout                                      |
-| `ambient`        | Slow generative visuals for late evening (CSS/canvas, self-contained)             |
-| `family-message` | LAN-accessible POST endpoint for short messages, displayed for 1 hour             |
-| `doorbell`       | Auto-trigger on HA motion/doorbell event; shows snapshot or stream                |
 
 Each built-in lives under `builtin-screens/<id>/` with `index.html`, `manifest.json`, and assets. The manifest declares config schema; the web UI auto-generates a form for it.
-
-**`family-message` is intentionally unauthenticated** within the LAN — anyone on the network can POST a short message. Enforced limits: 280-char message, 1 message per IP per 5 minutes, no HTML rendering. **Disabled by default** in `frame.yaml`; enable only if you trust your LAN.
 
 ---
 
@@ -485,7 +474,7 @@ If frame-core starts and discovers an existing on-disk config that doesn't valid
 
 - Loads a minimal hardcoded config: clock as the only screen, default brightness, no MQTT
 - Web UI is reachable on the bearer token from `/etc/frame/secrets/bearer_token` (or a printed-to-console one-time token if even that file is unreadable)
-- The active screen is a built-in `emergency` screen showing "Configuration error" plus the validation failure
+- The active screen is the built-in `clock` screen; the validation failure is returned in `/api/state.safe_mode_info`
 - Updater is disabled in safe mode until config is fixed
 
 This prevents a bad edit from bricking the device. The web UI's screen editor includes a "Validate" preview that shows the result of a write before committing.
@@ -578,10 +567,6 @@ ha:
 vnc:
   enabled: true
   password_file: /etc/frame/secrets/vnc
-
-builtins:
-  family_message:
-    enabled: false
 ```
 
 ### 9.2 `/etc/frame/screens.yaml`
@@ -685,18 +670,8 @@ picture-frame/
 ├── web/                     (React control UI)
 ├── builtin-screens/
 │   ├── clock/
-│   ├── calendar/
 │   ├── photos/
-│   ├── weather/
-│   ├── now-playing/
-│   ├── transit/
-│   ├── agenda-board/
-│   ├── status-board/
-│   ├── ambient/
-│   ├── family-message/
-│   ├── doorbell/
-│   ├── media-viewer/
-│   └── emergency/           (safe-mode error display)
+│   └── now-playing/
 ├── migrations/
 ├── deploy/
 │   ├── install.sh
@@ -739,7 +714,7 @@ All sections, bearer auth, brightness/reboot/logs, screen editor with Test butto
 MQTT discovery, all entities, command topics. Auth-failure handling. End-to-end with a real automation.
 
 ### Phase 7 — Built-ins (ongoing)
-Clock, photos, weather, now-playing first. Rest as time allows. VNC in web UI. Polish.
+Clock, photos, and now-playing first. VNC in web UI. Polish.
 
 ---
 

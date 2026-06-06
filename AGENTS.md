@@ -8,7 +8,7 @@ repo for the first time. Humans should read [SPEC.md](./SPEC.md) and
 
 A self-updating Wayland kiosk: a repurposed laptop boots into Chromium
 controlled by a local TypeScript service (`frame-core`). Built-in screens
-(clock, weather, photos, …) render as iframes inside a shell page in Tab 0;
+(clock, photos, now-playing) render as iframes inside a shell page in Tab 0;
 arbitrary URL screens render as separate Chromium tabs activated via CDP.
 
 The architectural primitives and the entire intended behavior are in
@@ -70,9 +70,9 @@ nvm use            # Node 22
 npm install
 npm run dev        # core (8080), web (5181), kiosk (5180) in parallel
 npm run typecheck
-npm test           # 40+ tests across claims, config, scheduler, family-
-                   # message, migrations, snapshot, updater, stateBus,
-                   # rules, and HTTP-level API
+npm test           # 40+ tests across claims, config, scheduler,
+                   # migrations, snapshot, updater, stateBus, rules,
+                   # and HTTP-level API
 npm run build
 ```
 
@@ -154,8 +154,8 @@ don't reinvent that.
 The SPEC is implemented end-to-end. A few items are explicit non-goals
 or live in operator hands:
 
-- **CalDAV / Google Photos.** §11 calls these out as best-effort —
-  the calendar built-in consumes ICS feeds, photos prefers Immich.
+- **CalDAV / Google Photos.** §11 calls these out as best-effort; photos
+  prefers Immich.
 - **Multi-device clustering.** Single device, single config file.
 - **Public internet exposure.** Bearer-token + LAN trust. The UI banners
   a warning if the device's IP isn't in RFC1918.

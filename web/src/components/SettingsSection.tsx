@@ -906,7 +906,7 @@ function BuiltinsTile({
     <SettingsCard
       icon={PuzzleIcon}
       title="Built-in screens"
-      description="Toggle opt-in features here. Per-screen options (weather coordinates, photo libraries, etc.) live on the Screens tab."
+      description="Toggle opt-in features here. Per-screen options live on the Screens tab."
     >
       {builtinIds.length === 0 ? (
         <p className="py-2 text-xs text-muted-foreground">No built-ins registered.</p>

@@ -17,7 +17,6 @@ import { applyConfigPatch } from "../config/write.js";
 import { Updater } from "../updater/index.js";
 import { Brightness } from "../system/brightness.js";
 import { CdpManager } from "../cdp/manager.js";
-import { FamilyMessages } from "./familyMessage.js";
 import { RuleStore } from "../scheduler/rules.js";
 import { VncSupervisor } from "../system/vnc.js";
 import { StateBus } from "./stateBus.js";
@@ -33,7 +32,6 @@ export type ApiDeps = {
   updater: Updater;
   brightness: Brightness;
   cdp: CdpManager;
-  family: FamilyMessages;
   rules: RuleStore;
   vnc: VncSupervisor;
   stateBus: StateBus;
@@ -57,9 +55,7 @@ export function setNowPlaying(state: NowPlaying | null) {
 
 const UNAUTH_PATHS = new Set([
   "/healthz",
-  "/api/family_message/current",
   "/api/now_playing",
-  "/family-message",
 ]);
 const WS_PATHS = new Set(["/ws", "/api/events", "/api/terminal", "/vnc/ws"]);
 
@@ -326,26 +322,6 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
       reply.code(400);
       return { error: String(err) };
     }
-  });
-
-  // ---- family message -------------------------------------------------------
-
-  app.get("/api/family_message/current", async () => deps.family.get());
-
-  app.post<{ Body: { message?: string } }>("/family-message", async (req, reply) => {
-    const cfg = deps.configStore.current.config;
-    const fm = (cfg.builtins as Record<string, { enabled?: boolean }>).family_message;
-    if (!fm?.enabled) {
-      reply.code(403);
-      return { error: "family_message_disabled" };
-    }
-    const ip = req.ip;
-    const result = deps.family.post(ip, req.body?.message);
-    if (!result.ok) {
-      reply.code(result.status);
-      return { error: result.error };
-    }
-    return { ok: true };
   });
 
   // ---- now playing (proxy for HA pushed media_player state) -----------------

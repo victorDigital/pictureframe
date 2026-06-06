@@ -10,7 +10,6 @@ import { ScreenController } from "./cdp/screenController.js";
 import { ShellBus } from "./api/shellBus.js";
 import { StateBus } from "./api/stateBus.js";
 import { startServer } from "./api/server.js";
-import { FamilyMessages } from "./api/familyMessage.js";
 import { Updater } from "./updater/index.js";
 import { Brightness } from "./system/brightness.js";
 import { KioskLifecycle } from "./system/kioskLifecycle.js";
@@ -73,7 +72,6 @@ async function main() {
   const rules = new RuleStore(rulesFile, cronEngine);
   await rules.load();
 
-  const family = new FamilyMessages(scheduler);
   const brightness = new Brightness(store.current.config);
   const kioskLifecycle = new KioskLifecycle({
     displayPower: (state) => brightness.displayPower(state),
@@ -256,7 +254,6 @@ async function main() {
     updater,
     brightness,
     cdp,
-    family,
     rules,
     vnc,
     stateBus,

@@ -63,50 +63,8 @@ feature:
 sudo apt-get update && sudo apt-get install -y wlsunset
 ```
 
-The recipes below cover the two integrations that need glue beyond the
+The recipes below cover the integrations that need glue beyond the
 out-of-the-box entities.
-
----
-
-## Doorbell auto-trigger
-
-`builtin-screens/doorbell` displays a snapshot or MJPEG stream and pulses
-a banner. It doesn't observe anything itself; SPEC §7 leaves the trigger
-to an HA automation. Define the doorbell as a regular URL-screen-style
-built-in in `screens.yaml`:
-
-```yaml
-- id: front-door
-  name: Front door
-  type: builtin
-  source: doorbell
-  config:
-    snapshot_url: http://homeassistant.local:8123/api/camera_proxy/camera.front_door
-    is_stream: false
-    refresh_ms: 1000
-    label: Someone at the door
-  preload: false
-```
-
-Then in HA:
-
-```yaml
-- alias: "Frame: show front door for 60 s on ring"
-  trigger:
-    - platform: state
-      entity_id: binary_sensor.front_door_ring
-      to: "on"
-  action:
-    - service: mqtt.publish
-      data:
-        topic: frame/cmd/show_screen
-        payload: '{"id": "front-door", "claim": "ha", "duration_min": 1}'
-```
-
-`claim: ha` (priority 20) outranks scheduled rules but yields to anything
-manually pinned — that's intentional so a person can still take the frame
-back if they want. Use `programmatic` (priority 30) if you'd rather have
-the doorbell beat manual-next claims too.
 
 ---
 

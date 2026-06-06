@@ -33,7 +33,7 @@ export function buildSafeMode(reason: string, details?: unknown): SafeMode {
     device: { name: "frame-safe-mode", bearer_token_file: "" },
     display: { brightness_backend: "none", default_brightness: 60, scale: 1, orientation: "normal" },
     screens_file: "",
-    default_screen: "emergency",
+    default_screen: "clock",
     manual_pinned_timeout_hours: 4,
     scheduler: { max_preloaded_url_screens: 5 },
     updater: {
@@ -51,10 +51,10 @@ export function buildSafeMode(reason: string, details?: unknown): SafeMode {
 
   const screens: Screen[] = [
     {
-      id: "emergency",
-      name: "Configuration error",
+      id: "clock",
+      name: "Clock",
       type: "builtin",
-      source: "emergency",
+      source: "clock",
       preload: true,
     },
   ];

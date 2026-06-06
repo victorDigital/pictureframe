@@ -116,6 +116,9 @@ function AnalogClock({ showSeconds, showDate }: { showSeconds: boolean; showDate
     let height = 1;
     let dpr = 1;
     let fontFamily = "\"Geist Variable\", ui-sans-serif, system-ui, sans-serif";
+    let staticLayer: HTMLCanvasElement | null = null;
+    let staticKey = "";
+    let lastFrameAt = 0;
 
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
@@ -126,17 +129,44 @@ function AnalogClock({ showSeconds, showDate }: { showSeconds: boolean; showDate
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      staticLayer = null;
+      staticKey = "";
     };
 
-    const draw = () => {
-      drawAnalogCanvas(ctx, width, height, new Date(), showSeconds, showDate, fontFamily);
+    const getStaticLayer = (date: Date) => {
+      const dayKey = showDate ? `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}` : "no-date";
+      const nextKey = `${width}x${height}@${dpr}:${fontFamily}:${dayKey}`;
+      if (staticLayer && staticKey === nextKey) return staticLayer;
+
+      const layer = document.createElement("canvas");
+      layer.width = Math.round(width * dpr);
+      layer.height = Math.round(height * dpr);
+      const layerCtx = layer.getContext("2d", { alpha: false });
+      if (!layerCtx) return null;
+
+      layerCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawAnalogStatic(layerCtx, width, height, date, showDate, fontFamily);
+      staticLayer = layer;
+      staticKey = nextKey;
+      return staticLayer;
+    };
+
+    const draw = (timestamp: number) => {
+      if (timestamp - lastFrameAt >= 1000 / 30) {
+        const date = new Date();
+        const layer = getStaticLayer(date);
+        if (layer) ctx.drawImage(layer, 0, 0, width, height);
+        else drawAnalogStatic(ctx, width, height, date, showDate, fontFamily);
+        drawAnalogMoving(ctx, width, height, date, showSeconds);
+        lastFrameAt = timestamp;
+      }
       frame = requestAnimationFrame(draw);
     };
 
     const observer = new ResizeObserver(resize);
     observer.observe(canvas);
     resize();
-    draw();
+    frame = requestAnimationFrame(draw);
 
     return () => {
       cancelAnimationFrame(frame);
@@ -149,7 +179,7 @@ function AnalogClock({ showSeconds, showDate }: { showSeconds: boolean; showDate
 
 const TAU = Math.PI * 2;
 
-function drawAnalogCanvas(ctx: CanvasRenderingContext2D, width: number, height: number, date: Date, showSeconds: boolean, showDate: boolean, fontFamily: string) {
+function drawAnalogStatic(ctx: CanvasRenderingContext2D, width: number, height: number, date: Date, showDate: boolean, fontFamily: string) {
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, width, height);
@@ -184,8 +214,22 @@ function drawAnalogCanvas(ctx: CanvasRenderingContext2D, width: number, height: 
 
   drawAnalogTicks(ctx, cx, cy, halfW, halfH, unit);
   if (showDate) drawAnalogDate(ctx, cx, cy, unit, date, fontFamily);
-  drawAnalogHands(ctx, cx, cy, halfW, halfH, unit, date, showSeconds);
 
+  ctx.restore();
+}
+
+function drawAnalogMoving(ctx: CanvasRenderingContext2D, width: number, height: number, date: Date, showSeconds: boolean) {
+  const unit = Math.min(width, height);
+  const cx = width / 2;
+  const cy = height / 2;
+  const radius = unit * 0.12;
+  const halfW = width * 0.5;
+  const halfH = height * 0.5;
+
+  ctx.save();
+  roundedRect(ctx, 0, 0, width, height, radius);
+  ctx.clip();
+  drawAnalogHands(ctx, cx, cy, halfW, halfH, unit, date, showSeconds);
   ctx.restore();
 }
 

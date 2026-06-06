@@ -5,5 +5,5 @@
     "jsx": "react-jsx",
     "types": ["vite/client", "react", "react-dom"]
   },
-  "include": ["src/**/*", "weather/assets/icons.js", "vite.config.ts"]
+  "include": ["src/**/*", "vite.config.ts"]
 }

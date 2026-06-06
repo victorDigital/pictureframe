@@ -5,6 +5,12 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.26] - 2026-06-06
+
+### Removed
+
+- Removed all built-in screens except `clock`, `photos`, and `now-playing`.
+
 ## [0.0.25] - 2026-06-06
 
 ### Changed

@@ -1,8 +1,8 @@
 # Picture Frame
 
-A repurposed laptop turned into a flexible information display: clock, calendar,
-photos, weather, Grafana, Home Assistant dashboards — anything that can render
-in a browser, plus a set of first-class built-in screens.
+A repurposed laptop turned into a flexible information display: clock, photos,
+now-playing, Grafana, Home Assistant dashboards — anything that can render in a
+browser, plus a small set of first-class built-in screens.
 
 See [SPEC.md](./SPEC.md) for the full design.
 
@@ -76,7 +76,7 @@ npm run build
 ```
 
 20+ tests cover claim priority resolution, manual_next yield semantics,
-config validation, family-message rate limiting, and migration integrity.
+config validation, update safety, and migration integrity.
 
 ---
 
@@ -95,7 +95,7 @@ Examples ship in this repo as [`config.example.yaml`](./config.example.yaml)
 and [`screens.example.yaml`](./screens.example.yaml).
 
 Bad configs put frame-core into **safe mode** (SPEC §8.2): the API is still
-reachable, the only screen is `emergency`, the validation reason is
+reachable, the only screen is `clock`, the validation reason is
 returned in `/api/state.safe_mode_info` and surfaced in the Now tab. The
 updater is disabled until the config is fixed.
 
@@ -119,8 +119,7 @@ config you get:
 Command topics for automations are listed in SPEC §6.3.
 
 See [docs/HOMEASSISTANT.md](./docs/HOMEASSISTANT.md) for ready-to-paste
-automations covering doorbell triggers, push-on-play for now-playing, and
-sunset dimming.
+automations covering push-on-play for now-playing and sunset dimming.
 
 ---
 

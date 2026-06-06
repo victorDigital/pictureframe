@@ -162,7 +162,7 @@ test("heartbeat watchdog ignores screens rendered in a Chromium URL tab", () => 
   });
 
   lifecycle.shellConnected();
-  lifecycle.activeScreenChanged({ id: "weather", type: "url", renderedByShell: false });
+  lifecycle.activeScreenChanged({ id: "dashboard", type: "url", renderedByShell: false });
 
   assert.equal(scheduled, false);
 });
