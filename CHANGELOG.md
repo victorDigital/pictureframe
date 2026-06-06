@@ -5,6 +5,12 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.29] - 2026-06-06
+
+### Changed
+
+- Reissued the current stable build as a fresh patch release.
+
 ## [0.0.28] - 2026-06-06
 
 ### Fixed
