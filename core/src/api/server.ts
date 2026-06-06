@@ -21,6 +21,8 @@ import { RuleStore } from "../scheduler/rules.js";
 import { VncSupervisor } from "../system/vnc.js";
 import { StateBus } from "./stateBus.js";
 import { paths } from "../util/paths.js";
+import { getNowPlaying, setNowPlaying } from "../nowPlaying.js";
+import { googlePhotoUrl, listGooglePhotos } from "../photos/google.js";
 
 const log = sub("api");
 
@@ -37,21 +39,6 @@ export type ApiDeps = {
   stateBus: StateBus;
   version: string;
 };
-
-type NowPlaying = {
-  state: string;
-  title?: string;
-  artist?: string;
-  album?: string;
-  duration?: number;
-  position?: number;
-  entity_picture?: string;
-};
-
-let nowPlaying: NowPlaying | null = null;
-export function setNowPlaying(state: NowPlaying | null) {
-  nowPlaying = state;
-}
 
 const UNAUTH_PATHS = new Set([
   "/healthz",
@@ -91,6 +78,7 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
     const url = req.url.split("?")[0]!;
     if (UNAUTH_PATHS.has(url)) return;
     if (url.startsWith("/shell/") || url.startsWith("/builtin/")) return;
+    if (url.startsWith("/api/photos/google") && isLoopbackIp(req.ip)) return;
     if (!url.startsWith("/api") && !url.startsWith("/ws") && !WS_PATHS.has(url)) return;
 
     const expected = deps.configStore.current.bearerToken;
@@ -106,7 +94,7 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
       const qsToken = new URL(req.url, "http://x").searchParams.get("token");
       if (qsToken === expected) return;
       const ip = req.ip;
-      if (ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1") return;
+      if (isLoopbackIp(ip)) return;
     }
 
     const header = req.headers.authorization;
@@ -326,11 +314,52 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
 
   // ---- now playing (proxy for HA pushed media_player state) -----------------
 
-  app.get("/api/now_playing", async () => nowPlaying);
-  app.put<{ Body: NowPlaying | null }>("/api/now_playing", async (req) => {
+  const updateNowPlaying = async (req: FastifyRequest<{ Body: unknown }>) => {
     setNowPlaying(req.body ?? null);
     return { ok: true };
+  };
+
+  app.get("/api/now_playing", async () => getNowPlaying());
+  app.put<{ Body: unknown }>("/api/now_playing", updateNowPlaying);
+  app.post<{ Body: unknown }>("/api/now_playing", updateNowPlaying);
+
+  app.get<{ Querystring: { screen?: string } }>("/api/photos/google", async (req, reply) => {
+    const screen = photoScreen(deps.configStore.current.screens, req.query.screen);
+    if (!screen) {
+      reply.code(404);
+      return { error: "photo_screen_not_found" };
+    }
+    try {
+      return { photos: await listGooglePhotos(screen) };
+    } catch (err) {
+      reply.code(502);
+      return { error: "google_photos_unavailable", details: String(err) };
+    }
   });
+
+  app.get<{ Querystring: { screen?: string; id?: string } }>(
+    "/api/photos/google/media",
+    async (req, reply) => {
+      const screen = photoScreen(deps.configStore.current.screens, req.query.screen);
+      if (!screen || !req.query.id) {
+        reply.code(404);
+        return { error: "google_photo_not_found" };
+      }
+      try {
+        const url = await googlePhotoUrl(screen, req.query.id);
+        const image = await fetch(url);
+        if (!image.ok) throw new Error(`Google Photos image HTTP ${image.status}`);
+        const bytes = Buffer.from(await image.arrayBuffer());
+        reply
+          .header("content-type", image.headers.get("content-type") ?? "image/jpeg")
+          .header("cache-control", "private, max-age=300");
+        return bytes;
+      } catch (err) {
+        reply.code(502);
+        return { error: "google_photo_unavailable", details: String(err) };
+      }
+    },
+  );
 
   // ---- vnc ------------------------------------------------------------------
 
@@ -685,6 +714,15 @@ export async function createServer(deps: ApiDeps): Promise<FastifyInstance> {
   });
 
   return app;
+}
+
+function isLoopbackIp(ip: string) {
+  return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
+}
+
+function photoScreen(screens: Screen[], id?: string) {
+  if (!id) return undefined;
+  return screens.find((screen) => screen.id === id && screen.type === "builtin" && screen.source === "photos");
 }
 
 async function gpgFingerprint(armoredKey: string): Promise<string | null> {

@@ -5,6 +5,25 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.27] - 2026-06-06
+
+### Added
+
+- Added Google Photos album support to the `photos` built-in through a
+  frame-core OAuth proxy, with config fields for album id, token files, item
+  limits, and requested image size.
+- Added Home Assistant now-playing push support over MQTT and REST so the
+  `now-playing` built-in can render current `media_player` details.
+
+### Changed
+
+- The `photos` built-in now defaults to Google Photos, with local and Immich
+  remaining as fallback backends.
+
+### Fixed
+
+- Capped the kiosk Chromium service cgroup at 10% CPU to reduce fan spin-up.
+
 ## [0.0.26] - 2026-06-06
 
 ### Removed

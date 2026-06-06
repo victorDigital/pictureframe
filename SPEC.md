@@ -584,7 +584,14 @@ screens:
     name: Family photos
     type: builtin
     source: photos
-    config: { library: immich, interval_sec: 30, transition: kenburns }
+    config:
+      library: google
+      google_album_id: "replace-with-google-photos-album-id"
+      google_client_id: "replace-with-google-oauth-client-id"
+      google_client_secret_file: /etc/frame/secrets/google_photos_client_secret
+      google_refresh_token_file: /etc/frame/secrets/google_photos_refresh_token
+      interval_sec: 30
+      transition_style: kenburns
     preload: true
 
   - id: grafana-home
@@ -629,11 +636,13 @@ The earlier draft had sudoers wildcards on backlight paths. Wildcards in sudoers
 
 ## 11. Known caveats and recommendations
 
-**Photo library backend.** Google Photos Library API access has tightened repeatedly through 2024–25 and `gphotos-sync` is effectively unmaintained. The `photos` built-in supports three backends in recommended order:
+**Photo library backend.** The `photos` built-in defaults to Google Photos through a frame-core OAuth proxy. Secrets stay on the frame as files, and the browser only receives local `/api/photos/google/*` URLs. Google tightened the Photos Library API in 2025, so this backend is limited to content the configured Google API app can access, primarily app-created albums/media. Arbitrary user-library picking would require the newer Google Photos Picker API, which is not implemented here.
 
-1. **Immich** (self-hosted photo library) — fully featured, actively developed, recommended primary
-2. **Local directory** (rclone or manual sync) — simplest, no service to run
-3. **Google Photos direct API** — listed for completeness; expect breakage; not the default
+Supported backends:
+
+1. **Google Photos** - default, album-backed, proxied by frame-core
+2. **Local directory** - simplest fallback, no service to run
+3. **Immich** - self-hosted photo library fallback
 
 Configure via the screen's `library` config field.
 

@@ -10,7 +10,14 @@ screens:
     name: Family photos
     type: builtin
     source: photos
-    config: { library: immich, interval_sec: 30, transition: kenburns }
+    config:
+      library: google
+      google_album_id: "replace-with-google-photos-album-id"
+      google_client_id: "replace-with-google-oauth-client-id"
+      google_client_secret_file: /etc/frame/secrets/google_photos_client_secret
+      google_refresh_token_file: /etc/frame/secrets/google_photos_refresh_token
+      interval_sec: 30
+      transition_style: kenburns
     preload: true
 
   - id: grafana-home

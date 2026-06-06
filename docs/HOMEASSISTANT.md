@@ -70,12 +70,55 @@ out-of-the-box entities.
 
 ## Push media_player → now-playing
 
-The `now-playing` built-in polls `/api/now_playing` and renders whatever
-state HA has pushed there. A short automation keeps that endpoint in sync.
+The `now-playing` built-in polls frame-core and renders the latest media state
+HA has pushed there. MQTT is the preferred path because the frame already
+subscribes to `frame/cmd/+`.
 
-Generate a long-lived token in HA (under Profile → Security) and store it
-on the frame device, e.g. `/etc/frame/secrets/ha_token` (mode `0600`).
-Then in HA:
+In HA:
+
+```yaml
+- alias: "Frame: push spotify now-playing"
+  trigger:
+    - platform: state
+      entity_id: media_player.spotify
+  action:
+    - service: mqtt.publish
+      data:
+        topic: frame/cmd/now_playing
+        payload: >
+          {% set player = states.media_player.spotify %}
+          {{
+            {
+              "state": player.state,
+              "title": player.attributes.media_title,
+              "artist": player.attributes.media_artist,
+              "album": player.attributes.media_album_name,
+              "duration": player.attributes.media_duration | int(0),
+              "position": player.attributes.media_position | int(0),
+              "entity_picture": player.attributes.entity_picture
+            } | to_json
+          }}
+```
+
+The frame also accepts HA-style payloads with an `attributes` object, so this is
+valid too:
+
+```yaml
+payload: >
+  {% set player = states.media_player.spotify %}
+  {{
+    {
+      "state": player.state,
+      "attributes": player.attributes
+    } | to_json
+  }}
+```
+
+When `entity_picture` is a relative HA URL, frame-core resolves it against
+`http://<mqtt-host>:8123`. If your MQTT broker is not the HA web host, include
+`"ha_base_url": "http://homeassistant.local:8123"` in the MQTT payload.
+
+The older REST push path still works:
 
 ```yaml
 - alias: "Frame: push spotify now-playing"
@@ -97,19 +140,19 @@ rest_command:
   frame_push_now_playing:
     url: "http://frame.local:8080/api/now_playing"
     method: PUT
-    headers:
-      Authorization: "Bearer !secret frame_bearer_token"
     content_type: "application/json"
     payload: >
-      {
-        "state": "{{ state }}",
-        "title": "{{ title }}",
-        "artist": "{{ artist }}",
-        "album": "{{ album }}",
-        "duration": {{ duration }},
-        "position": {{ position }},
-        "entity_picture": "{{ entity_picture }}"
-      }
+      {{
+        {
+          "state": state,
+          "title": title,
+          "artist": artist,
+          "album": album,
+          "duration": duration,
+          "position": position,
+          "entity_picture": entity_picture
+        } | to_json
+      }}
 ```
 
 Combine with the SPEC §6.4 example to swap to the now-playing screen the

@@ -94,6 +94,9 @@ Everything lives under `/etc/frame/`:
 Examples ship in this repo as [`config.example.yaml`](./config.example.yaml)
 and [`screens.example.yaml`](./screens.example.yaml).
 
+The `photos` built-in defaults to Google Photos. Setup notes for OAuth token
+files and album config are in [`docs/GOOGLE_PHOTOS.md`](./docs/GOOGLE_PHOTOS.md).
+
 Bad configs put frame-core into **safe mode** (SPEC §8.2): the API is still
 reachable, the only screen is `clock`, the validation reason is
 returned in `/api/state.safe_mode_info` and surfaced in the Now tab. The

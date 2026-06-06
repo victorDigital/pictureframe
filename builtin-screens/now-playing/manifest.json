@@ -1,7 +1,7 @@
 {
   "id": "now-playing",
   "name": "Now playing",
-  "description": "Album art + track info. State pushed by frame-core via WebSocket when Home Assistant reports a media_player playing.",
+  "description": "Album art + track info. State pushed from Home Assistant through MQTT or REST when a media_player changes.",
   "config_schema": {
     "type": "object",
     "properties": {

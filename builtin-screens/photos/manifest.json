@@ -1,7 +1,7 @@
 {
   "id": "photos",
   "name": "Photos",
-  "description": "Photo slideshow. Backends: Immich (recommended), local directory, Google Photos (best-effort \u2014 see SPEC \u00a711).",
+  "description": "Photo slideshow from a Google Photos album, with local and Immich fallback modes.",
   "config_schema": {
     "type": "object",
     "required": [
@@ -15,7 +15,8 @@
           "local",
           "google"
         ],
-        "default": "immich"
+        "default": "google",
+        "description": "Photo source. Google Photos uses frame-core as an OAuth-backed local proxy."
       },
       "interval_sec": {
         "type": "integer",
@@ -79,7 +80,55 @@
       },
       "immich_album_id": {
         "type": "string",
-        "description": "Optional \u2014 restrict to one album"
+        "description": "Optional - restrict to one Immich album"
+      },
+      "google_album_id": {
+        "type": "string",
+        "description": "Google Photos Library API album ID. If empty, app-created library photos are used."
+      },
+      "google_client_id": {
+        "type": "string",
+        "description": "OAuth client ID from Google Cloud."
+      },
+      "google_client_secret_file": {
+        "type": "string",
+        "description": "Path on the frame to a file containing the OAuth client secret."
+      },
+      "google_refresh_token_file": {
+        "type": "string",
+        "description": "Path on the frame to a file containing the OAuth refresh token."
+      },
+      "google_max_items": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1000,
+        "default": 200,
+        "format": "range",
+        "description": "Maximum Google Photos items to load into the slideshow."
+      },
+      "google_page_size": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "default": 100,
+        "format": "range",
+        "description": "Google Photos API page size."
+      },
+      "google_image_width": {
+        "type": "integer",
+        "minimum": 320,
+        "maximum": 8192,
+        "default": 2160,
+        "format": "range",
+        "description": "Requested Google Photos image width."
+      },
+      "google_image_height": {
+        "type": "integer",
+        "minimum": 320,
+        "maximum": 8192,
+        "default": 2160,
+        "format": "range",
+        "description": "Requested Google Photos image height."
       },
       "local_index_url": {
         "type": "string",

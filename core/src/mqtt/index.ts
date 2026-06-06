@@ -9,6 +9,7 @@ import {
   MIN_COLOR_TEMPERATURE_KELVIN,
 } from "../system/displayController.js";
 import { sub } from "../util/logger.js";
+import { setNowPlaying } from "../nowPlaying.js";
 
 const log = sub("mqtt");
 
@@ -326,9 +327,10 @@ export class HaBridge {
   }
 
   private async handleCommand(topic: string, raw: string) {
+    let parsed: unknown = raw;
     let body: Record<string, unknown> = {};
     try {
-      const parsed: unknown = raw ? JSON.parse(raw) : {};
+      parsed = raw ? JSON.parse(raw) : {};
       body =
         parsed && typeof parsed === "object" && !Array.isArray(parsed)
           ? (parsed as Record<string, unknown>)
@@ -378,6 +380,10 @@ export class HaBridge {
         }
         break;
       }
+      case "now_playing": {
+        setNowPlaying(parsed, { haBaseUrl: this.homeAssistantBaseUrl(body) });
+        break;
+      }
       case "reboot":
         await this.brightness.scheduleReboot();
         break;
@@ -398,6 +404,18 @@ export class HaBridge {
         log.warn({ cmd }, "unknown command");
     }
     this.publishState();
+  }
+
+  private homeAssistantBaseUrl(body: Record<string, unknown>) {
+    const explicit =
+      typeof body.ha_base_url === "string"
+        ? body.ha_base_url
+        : typeof body.base_url === "string"
+          ? body.base_url
+          : "";
+    if (explicit.trim()) return explicit.trim();
+    const mqtt = this.cfg.ha.mqtt;
+    return mqtt?.host ? `http://${mqtt.host}:8123` : undefined;
   }
 
   // Provided to satisfy the type checker on the screens parameter referenced above.

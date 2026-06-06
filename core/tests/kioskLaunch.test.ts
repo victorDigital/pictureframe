@@ -50,6 +50,16 @@ test("kiosk launch script installs and selects the transparent cursor theme", as
   );
 });
 
+test("kiosk service caps Chromium CPU usage", async () => {
+  const unit = await fs.readFile(
+    path.resolve(import.meta.dirname, "../../deploy/systemd/frame-kiosk.service"),
+    "utf8",
+  );
+
+  assert.match(unit, /CPUAccounting=yes/);
+  assert.match(unit, /CPUQuota=10%/);
+});
+
 test("kiosk launch script is valid bash", async () => {
   const scriptPath = path.resolve(import.meta.dirname, "../../deploy/launch-chromium.sh");
 

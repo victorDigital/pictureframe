@@ -5,6 +5,7 @@ import type { FrameConfig, Screen } from "../src/config/schema.js";
 import type { Scheduler } from "../src/scheduler/index.js";
 import type { Updater } from "../src/updater/index.js";
 import type { Brightness } from "../src/system/brightness.js";
+import { getNowPlaying, setNowPlaying } from "../src/nowPlaying.js";
 
 function config(): FrameConfig {
   return {
@@ -166,4 +167,40 @@ test("HA color temperature commands publish clamped Kelvin state", async () => {
     published.filter((p) => p.topic === "frame/living-room-frame/display_power").at(-1)?.payload,
     "on",
   );
+});
+
+test("HA now-playing command stores media_player attributes", async () => {
+  setNowPlaying(null);
+  const { ha } = bridge();
+  const handleCommand = (ha as unknown as {
+    handleCommand: (topic: string, raw: string) => Promise<void>;
+  }).handleCommand.bind(ha);
+
+  await handleCommand(
+    "frame/cmd/now_playing",
+    JSON.stringify({
+      state: "playing",
+      attributes: {
+        media_title: "Soft Light",
+        media_artist: "The Frames",
+        media_album_name: "Kiosk Sessions",
+        media_duration: 245,
+        media_position: 42,
+        entity_picture: "/api/media_player_proxy/media_player.spotify?token=abc",
+      },
+    }),
+  );
+
+  assert.deepEqual(getNowPlaying(), {
+    state: "playing",
+    title: "Soft Light",
+    artist: "The Frames",
+    album: "Kiosk Sessions",
+    duration: 245,
+    position: 42,
+    entity_picture: "http://homeassistant.local:8123/api/media_player_proxy/media_player.spotify?token=abc",
+  });
+
+  await handleCommand("frame/cmd/now_playing", "null");
+  assert.equal(getNowPlaying(), null);
 });

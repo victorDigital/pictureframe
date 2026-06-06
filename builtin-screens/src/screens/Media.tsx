@@ -3,7 +3,7 @@ import type { Config } from "../shared";
 import { clamp, ErrorPanel, numberValue, Shell, stringValue } from "../shared";
 
 type MediaItem = { url: string; caption: string };
-type PhotoItem = MediaItem & { api?: boolean };
+type PhotoItem = MediaItem & { api?: "immich" | "google" };
 type PhotoSlide = { key: number; url: string; caption: string; visible: boolean; exiting: boolean };
 
 function captionFromUrl(url: string) {
@@ -14,7 +14,7 @@ function captionFromUrl(url: string) {
   }
 }
 
-export function PhotosScreen({ config }: { config: Config }) {
+export function PhotosScreen({ config, id }: { config: Config; id: string }) {
   const [items, setItems] = useState<PhotoItem[]>([]);
   const [slides, setSlides] = useState<PhotoSlide[]>([]);
   const [caption, setCaption] = useState("");
@@ -31,13 +31,13 @@ export function PhotosScreen({ config }: { config: Config }) {
   useEffect(() => {
     async function load() {
       try {
-        setItems(shuffle(await loadPhotos(config)));
+        setItems(shuffle(await loadPhotos(config, id)));
       } catch (err) {
         setError(String(err));
       }
     }
     void load();
-  }, [config]);
+  }, [config, id]);
   useEffect(() => {
     document.documentElement.style.setProperty("--fade-duration", `${fadeMs}ms`);
     document.documentElement.style.setProperty("--kb-duration", `${kbSec}s`);
@@ -118,15 +118,15 @@ function resolvePhotoTransition(config: Config) {
   return legacy === "none" ? "fade" : legacy;
 }
 
-async function loadPhotos(config: Config): Promise<PhotoItem[]> {
-  const library = stringValue(config.library, "immich");
+async function loadPhotos(config: Config, id: string): Promise<PhotoItem[]> {
+  const library = stringValue(config.library, "google");
   if (library === "local") {
     const url = stringValue(config.local_index_url);
     if (!url) throw new Error("Configure local_index_url");
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Local HTTP ${res.status}`);
     const list = (await res.json()) as unknown[];
-    return list.map((src) => ({ url: String(src), caption: captionFromUrl(String(src)), api: false }));
+    return list.map((src) => ({ url: String(src), caption: captionFromUrl(String(src)) }));
   }
   if (library === "immich") {
     const base = stringValue(config.immich_base_url).replace(/\/$/, "");
@@ -141,10 +141,18 @@ async function loadPhotos(config: Config): Promise<PhotoItem[]> {
     return assets.slice(0, 200).map((asset) => ({
       url: `${base}/api/asset/file/${asset.id}?isThumb=false`,
       caption: asset.exifInfo?.description ?? (asset.exifInfo?.city && asset.exifInfo?.country ? `${asset.exifInfo.city}, ${asset.exifInfo.country}` : asset.originalFileName ?? ""),
-      api: true,
+      api: "immich",
     }));
   }
-  throw new Error("Google Photos backend is best-effort; switch to Immich (see SPEC section 11).");
+  if (library === "google") {
+    const res = await fetch(`/api/photos/google?screen=${encodeURIComponent(id)}`);
+    if (!res.ok) throw new Error(`Google Photos HTTP ${res.status}`);
+    const body = (await res.json()) as { photos?: Array<{ url?: string; caption?: string }> };
+    return (body.photos ?? [])
+      .filter((photo) => photo.url)
+      .map((photo) => ({ url: photo.url!, caption: photo.caption ?? "", api: "google" }));
+  }
+  throw new Error(`Unsupported photo library: ${library}`);
 }
 
 function shuffle<T>(items: T[]) {
@@ -158,7 +166,8 @@ function shuffle<T>(items: T[]) {
 
 async function fetchPhoto(config: Config, item: PhotoItem) {
   if (!item.api) return item.url;
-  const res = await fetch(item.url, { headers: { "x-api-key": stringValue(config.immich_api_key) } });
+  const init = item.api === "immich" ? { headers: { "x-api-key": stringValue(config.immich_api_key) } } : {};
+  const res = await fetch(item.url, init);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return URL.createObjectURL(await res.blob());
 }
