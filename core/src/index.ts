@@ -13,6 +13,7 @@ import { startServer } from "./api/server.js";
 import { Updater } from "./updater/index.js";
 import { Brightness } from "./system/brightness.js";
 import { KioskLifecycle } from "./system/kioskLifecycle.js";
+import { PowerInhibitor } from "./system/powerInhibitor.js";
 import { HaBridge } from "./mqtt/index.js";
 import { VncSupervisor } from "./system/vnc.js";
 import { runCommand } from "./updater/exec.js";
@@ -73,6 +74,7 @@ async function main() {
   await rules.load();
 
   const brightness = new Brightness(store.current.config);
+  const powerInhibitor = new PowerInhibitor();
   const kioskLifecycle = new KioskLifecycle({
     displayPower: (state) => brightness.displayPower(state),
     restartKiosk: async () => {
@@ -91,6 +93,7 @@ async function main() {
   });
   const updater = new Updater(store, version);
   const vnc = new VncSupervisor(store.current.config.vnc?.password_file);
+  await powerInhibitor.start();
 
   function sendDisplayGeometry() {
     const display = store.current.config.display;
@@ -289,6 +292,7 @@ async function main() {
     updater.stop();
     cronEngine.stop();
     vnc.stop();
+    powerInhibitor.stop();
     kioskLifecycle.stop();
     if (cdpReconnectTimer) clearTimeout(cdpReconnectTimer);
     await cdp.stop().catch(() => {});

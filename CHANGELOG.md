@@ -5,6 +5,13 @@ and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.0.33] - 2026-06-07
+
+### Fixed
+
+- Moved system sleep inhibition into frame-core so the laptop stays awake while
+  Chromium is recycled overnight or the kiosk process restarts.
+
 ## [0.0.32] - 2026-06-06
 
 ### Fixed
